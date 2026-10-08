@@ -1,0 +1,1138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light">
+<meta name="theme-color" content="#173f3a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Salary">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>Salary Book</title>
+<link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#FAF7F0; --ink:#22201b; --ink-soft:#756c5c; --rule:#e6dfcf; --card:#ffffff;
+    --shadow:rgba(34,32,27,0.09);
+    --accent:#1d5a52; --accent-2:#123a35; --accent-tint:#e3efeb;
+    --gold:#d9a23a; --gold-tint:#fbf0d9;
+    --good:#2f6b3a; --bad:#a13d3d; --blue:#3d5a9e;
+    --karigar:#1d5a52; --helper:#3d5a9e; --extra:#b5651d;
+  }
+  html{ color-scheme:light; }
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{ margin:0; padding:0; }
+  body{ background:linear-gradient(180deg,#FDFBF6 0%,#F5EFE2 100%) !important; color:var(--ink); font-family:'Inter',-apple-system,sans-serif; min-height:100vh; -webkit-font-smoothing:antialiased; }
+  .wrap{ max-width:560px; margin:0 auto; padding:0 16px 96px; }
+  header{ position:relative; overflow:hidden; background:linear-gradient(125deg,var(--accent) 0%,var(--accent-2) 100%); margin:0 -16px 14px; padding:22px 18px 20px; border-radius:0 0 22px 22px; box-shadow:0 6px 18px rgba(18,58,53,.25); color:#fff; }
+  header::after{ content:''; position:absolute; right:-40px; top:-50px; width:170px; height:170px; border-radius:50%; background:radial-gradient(circle,rgba(217,162,58,.35),rgba(217,162,58,0) 70%); }
+  .hrow{ display:flex; align-items:center; justify-content:space-between; gap:8px; position:relative; z-index:1; }
+  h1{ font-family:'Fraunces',serif; font-weight:700; font-size:25px; margin:0; letter-spacing:-.01em; }
+  h1 span{ color:var(--gold); }
+  .who{ font-size:12px; opacity:.85; margin-top:4px; position:relative; z-index:1; }
+  .hdr-btn{ background:rgba(255,255,255,.14); border:1px solid rgba(255,255,255,.35); color:#fff; font:500 12px 'Inter'; padding:6px 11px; border-radius:20px; cursor:pointer; }
+
+  .tabs{ position:fixed; bottom:0; left:0; right:0; z-index:15; background:rgba(255,255,255,.96); backdrop-filter:blur(8px); border-top:1px solid var(--rule); display:flex; justify-content:center; padding:6px 6px calc(6px + env(safe-area-inset-bottom)); }
+  .tabs .in{ display:flex; max-width:560px; width:100%; }
+  .tabs button{ flex:1; background:none; border:none; padding:6px 0 4px; font:600 11px 'Inter'; color:var(--ink-soft); cursor:pointer; display:flex; flex-direction:column; align-items:center; gap:3px; border-radius:12px; }
+  .tabs button svg{ width:22px; height:22px; }
+  .tabs button.on{ color:var(--accent); background:var(--accent-tint); }
+
+  .datebar{ display:flex; align-items:center; justify-content:space-between; background:var(--card); border:1px solid var(--rule); border-radius:16px; padding:6px; box-shadow:0 2px 10px var(--shadow); margin-bottom:12px; }
+  .datebar button{ width:40px; height:40px; border-radius:12px; border:none; background:var(--paper); font-size:20px; color:var(--ink); cursor:pointer; }
+  .datebar .dl{ font-family:'Fraunces',serif; font-weight:600; font-size:17px; text-align:center; flex:1; position:relative; }
+  .datebar .dl small{ display:block; font:400 11.5px 'Inter'; color:var(--ink-soft); }
+  .datebar input[type=date]{ position:absolute; inset:0; opacity:0; width:100%; cursor:pointer; }
+
+  .card{ background:var(--card); border:1px solid var(--rule); border-radius:16px; padding:14px; box-shadow:0 2px 10px var(--shadow); margin-bottom:12px; }
+  .ctitle{ font-family:'Fraunces',serif; font-weight:600; font-size:15px; margin:0 0 10px; display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  .count{ font:700 12px 'Inter'; background:var(--accent-tint); color:var(--accent); border-radius:20px; padding:2px 9px; }
+  .sec{ font-family:'Fraunces',serif; font-weight:600; font-size:14.5px; color:var(--ink-soft); margin:18px 2px 8px; }
+  .lbl{ font:600 11px 'Inter'; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-soft); margin:2px 0 6px; }
+  .row{ display:flex; gap:8px; align-items:center; }
+  .row > *{ flex:1; }
+
+  .seg{ display:flex; background:var(--paper); border:1px solid var(--rule); border-radius:12px; padding:3px; gap:3px; }
+  .seg button{ flex:1; padding:9px 0; border:none; border-radius:9px; background:transparent; font:600 13.5px 'Inter'; color:var(--ink-soft); cursor:pointer; }
+  .seg button.on{ background:var(--accent); color:#fff; box-shadow:0 2px 6px rgba(29,90,82,.3); }
+  .seg button.on.gold{ background:var(--gold); color:#2a1d05; box-shadow:0 2px 6px rgba(217,162,58,.35); }
+
+  input[type=text],input[type=number],input[type=password],input[type=date],input[type=month],select,textarea{ width:100%; font:15px 'Inter'; padding:11px 12px; border:1px solid var(--rule); border-radius:11px; background:#fff; color:var(--ink); outline:none; }
+  input:focus,select:focus,textarea:focus{ border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-tint); }
+  input[type=number]{ font-family:'IBM Plex Mono',monospace; }
+  .big-num{ font-size:22px !important; font-weight:600; text-align:center; }
+
+  .chips{ display:flex; flex-wrap:wrap; gap:7px; }
+  .chip{ border:1px solid var(--rule); background:#fff; border-radius:22px; padding:8px 12px; font:500 13.5px 'Inter'; color:var(--ink); cursor:pointer; user-select:none; transition:all .12s; }
+  .chip.on{ background:var(--rc,var(--accent)); border-color:var(--rc,var(--accent)); color:#fff; box-shadow:0 2px 8px rgba(0,0,0,.15); }
+  .chip.on::before{ content:'✓ '; }
+  .search{ position:sticky; top:8px; z-index:5; margin-bottom:12px; }
+  .search input{ border-radius:14px; box-shadow:0 4px 14px var(--shadow); padding:13px 14px; }
+  .hrs{ display:flex; align-items:center; justify-content:space-between; gap:10px; padding:8px 0; border-top:1px dashed var(--rule); font-size:14px; }
+  .hrs input{ width:90px; text-align:center; padding:7px; }
+
+  .btn{ width:100%; padding:13px 0; border:none; border-radius:12px; background:var(--accent); color:#fff; font:600 15px 'Inter'; cursor:pointer; box-shadow:0 4px 12px rgba(29,90,82,.28); }
+  .btn.gold{ background:var(--gold); color:#2a1d05; box-shadow:0 4px 12px rgba(217,162,58,.3); }
+  .btn.ghost{ background:transparent; color:var(--ink); border:1px solid var(--ink); box-shadow:none; }
+  .btn.danger{ background:transparent; color:var(--bad); border:1px solid var(--bad); box-shadow:none; }
+  .btn:disabled{ opacity:.55; }
+  .mt{ margin-top:10px; }
+
+  .warn{ background:var(--gold-tint); border:1px solid #efd59c; border-radius:12px; padding:10px 12px; font-size:13.5px; margin-top:10px; }
+  .warn label{ display:flex; gap:8px; align-items:center; margin-top:6px; font-weight:600; }
+  .note{ font-size:12.5px; color:var(--ink-soft); }
+
+  .list-row{ display:flex; align-items:center; gap:10px; padding:11px 2px; border-bottom:1px solid var(--rule); }
+  .list-row:last-child{ border-bottom:none; }
+  .list-row .main{ flex:1; min-width:0; }
+  .list-row .t{ font-weight:600; font-size:14.5px; }
+  .list-row .s{ font-size:12px; color:var(--ink-soft); margin-top:2px; }
+  .list-row .amt{ font:600 15px 'IBM Plex Mono',monospace; white-space:nowrap; }
+  .list-row.tap{ cursor:pointer; }
+  .x{ background:none; border:none; color:var(--ink-soft); font-size:16px; cursor:pointer; padding:4px; }
+  .tag{ display:inline-block; font:700 10.5px 'Inter'; border-radius:10px; padding:2px 7px; color:#fff; margin-right:3px; vertical-align:middle; }
+  .avatar{ width:36px; height:36px; border-radius:12px; display:flex; align-items:center; justify-content:center; font:700 13px 'Inter'; color:#fff; flex-shrink:0; }
+
+  .kpis{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:12px; }
+  .kpi{ background:var(--card); border:1px solid var(--rule); border-radius:16px; padding:12px 14px; box-shadow:0 2px 10px var(--shadow); }
+  .kpi.hero{ grid-column:1/-1; background:linear-gradient(125deg,var(--accent),var(--accent-2)); color:#fff; border:none; }
+  .kpi .k{ font:600 10.5px 'Inter'; text-transform:uppercase; letter-spacing:.05em; opacity:.75; }
+  .kpi .v{ font-family:'Fraunces',serif; font-weight:700; font-size:21px; margin-top:3px; }
+  .kpi.hero .v{ font-size:28px; color:#fff; }
+  .kpi.hero .k{ color:#fff; }
+  .subtabs{ display:flex; gap:6px; margin:6px 0 10px; overflow-x:auto; }
+  .subtabs button{ border:1px solid var(--rule); background:#fff; border-radius:20px; padding:7px 13px; font:600 12.5px 'Inter'; color:var(--ink-soft); cursor:pointer; white-space:nowrap; }
+  .subtabs button.on{ background:var(--ink); color:#fff; border-color:var(--ink); }
+  .bar{ height:6px; background:var(--paper); border-radius:4px; margin-top:6px; overflow:hidden; }
+  .bar i{ display:block; height:100%; background:linear-gradient(90deg,var(--accent),#3f8c80); border-radius:4px; }
+  table.t{ width:100%; border-collapse:collapse; font-size:13px; }
+  table.t th{ text-align:left; font:600 10.5px 'Inter'; text-transform:uppercase; color:var(--ink-soft); padding:6px 4px; border-bottom:1px solid var(--rule); }
+  table.t td{ padding:8px 4px; border-bottom:1px solid var(--rule); }
+  table.t td.n, table.t th.n{ text-align:right; font-family:'IBM Plex Mono',monospace; }
+  .empty{ text-align:center; color:var(--ink-soft); font-size:13.5px; padding:22px 10px; font-style:italic; }
+
+  .overlay{ position:fixed; inset:0; background:rgba(25,23,19,.55); z-index:30; display:flex; align-items:flex-end; justify-content:center; }
+  .overlay.center{ align-items:center; }
+  .overlay.hidden{ display:none; }
+  .sheet{ background:var(--paper); width:100%; max-width:560px; max-height:88vh; overflow-y:auto; border-radius:20px 20px 0 0; padding:18px 16px 28px; }
+  .overlay.center .sheet{ border-radius:20px; margin:0 12px; }
+  .sheet h2{ font-family:'Fraunces',serif; font-size:20px; margin:2px 0 6px; }
+  .sheet p.sub{ font-size:13px; color:var(--ink-soft); margin:0 0 14px; }
+  .field{ margin-bottom:10px; }
+  .login{ text-align:center; padding:6px 4px; }
+  .login .ic{ font-size:34px; margin-bottom:4px; }
+  .pins{ display:flex; justify-content:center; gap:12px; margin:18px 0; }
+  .pin-dot{ width:16px; height:16px; border-radius:50%; border:2px solid var(--accent); }
+  .pin-dot.f{ background:var(--accent); }
+  .keypad{ display:grid; grid-template-columns:repeat(3,1fr); gap:10px; max-width:260px; margin:0 auto; }
+  .keypad button{ padding:16px 0; font:20px 'IBM Plex Mono',monospace; border-radius:14px; border:1px solid var(--rule); background:#fff; color:var(--ink); cursor:pointer; }
+  .keypad button.w{ font:14px 'Inter'; }
+  .err{ color:var(--bad); min-height:16px; font-size:13px; margin-top:12px; }
+  .toast{ position:fixed; bottom:90px; left:50%; transform:translateX(-50%); background:var(--ink); color:#fff; padding:10px 18px; border-radius:20px; font-size:13px; z-index:50; opacity:0; transition:opacity .25s; pointer-events:none; max-width:85vw; text-align:center; }
+  .toast.show{ opacity:1; }
+  .chk{ display:flex; align-items:center; gap:8px; font-size:14px; padding:6px 0; }
+  .chk input{ width:18px; height:18px; accent-color:var(--accent); }
+  .money{ font-family:'IBM Plex Mono',monospace; }
+  .good{ color:var(--good); } .bad{ color:var(--bad); }
+  .demo-bar{ background:var(--gold); color:#2a1d05; text-align:center; font:600 12px 'Inter'; padding:6px; }
+</style>
+</head>
+<body>
+<div id="demoBar"></div>
+<div class="wrap" id="app" style="display:none;">
+  <header>
+    <div class="hrow"><h1>Salary <span>Book</span></h1><button class="hdr-btn" onclick="lockApp()">Lock</button></div>
+    <div class="who" id="who"></div>
+  </header>
+  <div id="view"></div>
+</div>
+<nav class="tabs" id="tabs" style="display:none;"><div class="in" id="tabsIn"></div></nav>
+
+<div class="overlay center hidden" id="authOverlay" style="z-index:45;"><div class="sheet"><div class="login">
+  <div class="ic">🔐</div><h2>Sign in to Salary Book</h2>
+  <p class="sub">One-time sign in on this phone. Use the same account as Cash Book.</p>
+  <input type="text" id="authEmail" placeholder="Email" autocomplete="username" inputmode="email" autocapitalize="off" style="margin-bottom:8px">
+  <input type="password" id="authPass" placeholder="Password" autocomplete="current-password" style="margin-bottom:10px">
+  <button class="btn" id="authBtn" onclick="doAuthLogin()">Sign in</button>
+  <div class="err" id="authError"></div>
+</div></div></div>
+
+<div class="overlay center hidden" id="passOverlay" style="z-index:44;"><div class="sheet"><div class="login">
+  <div class="ic">🗝️</div><h2 id="passTitle">Enter passphrase</h2>
+  <p class="sub" id="passSub"></p>
+  <input type="password" id="passInput" placeholder="Passphrase" autocomplete="off" style="margin-bottom:8px">
+  <input type="password" id="passInput2" placeholder="Type it again" autocomplete="off" style="display:none;margin-bottom:8px">
+  <button class="btn" id="passBtn" onclick="doPass()">Unlock</button>
+  <div class="err" id="passError"></div>
+</div></div></div>
+
+<div class="overlay center hidden" id="pinOverlay" style="z-index:43;"><div class="sheet"><div class="login">
+  <div class="ic">🔒</div><h2 id="pinTitle">Enter your PIN</h2>
+  <p class="sub">4-digit PIN</p>
+  <div class="pins" id="pins"><div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div></div>
+  <div class="keypad" id="keypad"></div>
+  <div class="err" id="pinError"></div>
+</div></div></div>
+
+<div class="overlay center hidden" id="setupOverlay" style="z-index:42;"><div class="sheet">
+  <h2>Salary Book set up</h2>
+  <p class="sub">You are the owner — you can see and change everything. Add Supervisor and Accountant later from Settings.</p>
+  <div class="field"><div class="lbl">Your name</div><input type="text" id="setupName" value="Aman"></div>
+  <div class="field"><div class="lbl">4-digit PIN</div><input type="text" id="setupPin" maxlength="4" inputmode="numeric" style="letter-spacing:6px;text-align:center"></div>
+  <label class="chk"><input type="checkbox" id="setupSeed" checked> Add the employee list from the Google Form (you can edit it later)</label>
+  <button class="btn mt" onclick="finishSetup()">Get started</button>
+</div></div>
+
+<div class="overlay hidden" id="sheetOverlay" onclick="if(event.target===this)closeSheet()"><div class="sheet" id="sheetBody"></div></div>
+<div class="toast" id="toast"></div>
+
+<script type="module">
+const DEMO = /[?&]demo\b/.test(location.search);
+let fb = null;
+if(!DEMO){
+  const [{ initializeApp }, A, F] = await Promise.all([
+    import("https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js"),
+    import("https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js"),
+    import("https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-lite.js")
+  ]);
+  // ====== FIREBASE CONFIG (aman-hub — same project as Cash Book) ======
+  const app = initializeApp({
+    apiKey: "AIzaSyCvB7qXHhHUM7Y2e9VdboGU0l_QGiMYrTk",
+    authDomain: "aman-hub-5f0d4.firebaseapp.com",
+    projectId: "aman-hub-5f0d4",
+    storageBucket: "aman-hub-5f0d4.firebasestorage.app",
+    messagingSenderId: "665635636967",
+    appId: "1:665635636967:web:3d9bf24c1ec52fb6400442"
+  });
+  fb = { A, F, auth: A.getAuth(app), db: F.getFirestore(app) };
+}
+const COL = 'salary';   // Firestore collection — separate from 'cashbook'
+const CUR = '₹';
+const PALETTE = ['#1d5a52','#3d5a9e','#b5651d','#8a3fa0','#2f6b3a','#a13d3d','#4a5da3','#6b4fa0'];
+
+/* ================= ENGINE-START (pure calculation, no UI) ================= */
+function rateFor(role, iso){
+  const rs = (role.rates||[]).filter(r => r.from <= iso).sort((a,b)=> a.from < b.from ? -1 : 1);
+  return rs.length ? rs[rs.length-1] : ((role.rates||[])[0] || { daily:0, hourly:0, monthly:0 });
+}
+// Turns every bhauti entry into per-person day lines. Entries must cover all history
+// (shortfall carry depends on earlier days).
+function computeLines(entries, cfg){
+  const roles = {}; for(const r of cfg.roles) roles[r.id] = r;
+  const sorted = [...entries].sort((a,b)=> a.date===b.date ? (a.at||0)-(b.at||0) : (a.date < b.date ? -1 : 1));
+  const pending = {};          // empId -> kami ghori still to cut from future OT
+  const lines = [];
+  for(const e of sorted){
+    const target = Number(cfg.targets[e.quality]) || 0;
+    const people = e.people || [];
+    const K = people.filter(p => roles[p.role] && roles[p.role].countsForBasic).length;
+    const basicG = target * K;
+    const total = Number(e.ghori) || 0;
+    const otG = total - basicG;
+    const roleCount = {}; for(const p of people) roleCount[p.role] = (roleCount[p.role]||0) + 1;
+    for(const p of people){
+      const role = roles[p.role]; if(!role) continue;
+      const rate = rateFor(role, e.date);
+      const basic = role.payType === 'monthly' ? 0 : (Number(rate.daily)||0);
+      let ot = 0, otGhoriUsed = 0, cut = 0;
+      if(role.otMode === 'ghori' && K > 0 && target > 0){
+        if(otG >= 0){
+          const pend = pending[p.emp] || 0;
+          otGhoriUsed = Math.max(0, otG - pend);
+          cut = Math.min(pend, otG);
+          pending[p.emp] = Math.max(0, pend - otG);
+          ot = otGhoriUsed / (roleCount[p.role] * target) * basic;
+        } else if(e.adjust){
+          pending[p.emp] = (pending[p.emp] || 0) + (-otG);
+        }
+      } else if(role.otMode === 'hours' && Number(p.otHours) > 0){
+        ot = Number(p.otHours) * (Number(rate.hourly)||0);
+      }
+      const totalAmt = Math.round(basic + ot);
+      lines.push({ entryId:e.id, date:e.date, unit:e.unit, shift:e.shift, quality:e.quality, emp:p.emp, role:p.role,
+        basic, ot: totalAmt - basic, total: totalAmt, otGhori: otGhoriUsed, groupOtGhori: Math.max(0, otG), shareN: roleCount[p.role], otMode: role.otMode, kamiCut: cut, otHours: Number(p.otHours)||0,
+        groupGhori: total, basicGhori: basicG, short: otG < 0 ? -otG : 0 });
+    }
+  }
+  return { lines, pending };
+}
+function daysInMonth(iso){ const [y,m] = iso.split('-').map(Number); return new Date(y, m, 0).getDate(); }
+function addDays(iso, n){ const d = new Date(iso+'T12:00:00Z'); d.setUTCDate(d.getUTCDate()+n); return d.toISOString().slice(0,10); }
+// Monthly-salary people accrue monthly/daysInMonth per active day.
+function monthlyAccrual(cfg, emp, from, to){
+  const roles = cfg.roles.filter(r => r.payType==='monthly' && (emp.roles||[]).includes(r.id));
+  if(!roles.length) return 0;
+  const start = [from, emp.from || from].sort()[1];
+  const end = emp.to ? [to, emp.to].sort()[0] : to;
+  let sum = 0;
+  for(let d = start; d <= end; d = addDays(d,1)){
+    for(const r of roles){ sum += (Number(rateFor(r,d).monthly)||0) / daysInMonth(d); }
+  }
+  return Math.round(sum);
+}
+function summarize(lines, advances, cfg, from, to){
+  const L = lines.filter(l => l.date >= from && l.date <= to);
+  const A = advances.filter(a => a.date >= from && a.date <= to);
+  const byEmp = {};
+  const get = id => byEmp[id] || (byEmp[id] = { emp:id, days:0, basic:0, ot:0, total:0, adv:0, ghori:0, otHours:0, byRole:{}, byUnit:{}, byQ:{}, monthly:0 });
+  for(const l of L){
+    const s = get(l.emp); s.days++; s.basic += l.basic; s.ot += l.ot; s.total += l.total; s.otHours += l.otHours;
+    const r = s.byRole[l.role] || (s.byRole[l.role] = { days:0, total:0, ot:0 }); r.days++; r.total += l.total; r.ot += l.ot;
+    const u = s.byUnit[l.unit] || (s.byUnit[l.unit] = { days:0, total:0, ghori:0 }); u.days++; u.total += l.total;
+    const q = s.byQ[l.quality] || (s.byQ[l.quality] = { days:0, duty:0, ot:0, otDays:0, share:0 }); q.days++; q.duty += l.basic; q.ot += l.ot;
+    if(l.otMode==='ghori' && l.otGhori>0){ q.otDays++; q.share += l.otGhori / l.shareN; }
+  }
+  for(const emp of cfg.employees){
+    const m = monthlyAccrual(cfg, emp, from, to);
+    if(m){ const s = get(emp.id); s.monthly = m; s.total += m; s.basic += m; }
+  }
+  for(const a of A){ get(a.emp).adv += Number(a.amount)||0; }
+  const units = {}, roles = {};
+  const seenEntry = new Set();
+  for(const l of L){
+    const u = units[l.unit] || (units[l.unit] = { mandays:0, total:0, ot:0, ghori:0 });
+    u.mandays++; u.total += l.total; u.ot += l.ot;
+    if(!seenEntry.has(l.entryId)){ seenEntry.add(l.entryId); u.ghori += l.groupGhori; }
+    const r = roles[l.role] || (roles[l.role] = { mandays:0, total:0, ot:0 }); r.mandays++; r.total += l.total; r.ot += l.ot;
+  }
+  const emps = Object.values(byEmp).map(s => ({ ...s, net: s.total - s.adv }));
+  const tot = emps.reduce((t,s)=>({ total:t.total+s.total, ot:t.ot+s.ot, adv:t.adv+s.adv, net:t.net+s.net }), { total:0, ot:0, adv:0, net:0 });
+  return { emps, units, roles, tot, lines: L, advances: A };
+}
+// Hisab for one employee up to a date.
+function hisabFor(empId, upto, lines, advances, hisabs, cfg){
+  const past = hisabs.filter(h => h.emp===empId && h.date < upto).sort((a,b)=> a.date < b.date ? -1 : 1);
+  const last = past[past.length-1];
+  const from = last ? addDays(last.date, 1) : '2000-01-01';
+  const emp = cfg.employees.find(e => e.id===empId) || {};
+  const myLines = lines.filter(l => l.emp===empId && l.date >= from && l.date <= upto);
+  const earnedDaily = myLines.reduce((s,l)=>s+l.total, 0);
+  const firstDate = myLines.length ? myLines[0].date : upto;
+  const monthly = monthlyAccrual(cfg, emp, last ? from : (emp.from || firstDate), upto);
+  const adv = advances.filter(a => a.emp===empId && a.date >= from && a.date <= upto).reduce((s,a)=>s+(Number(a.amount)||0), 0);
+  const prev = last && last.action==='carry' ? Number(last.balance)||0 : 0;
+  const earned = earnedDaily + monthly;
+  const ot = myLines.reduce((s,l)=>s+l.ot, 0);
+  return { from: last ? from : null, last, days: myLines.length, earned, duty: earned - ot, ot, adv, prev, due: earned - adv + prev };
+}
+/* ================= ENGINE-END ================= */
+
+/* ---------- helpers ---------- */
+function toISO(d){ const off=d.getTimezoneOffset(); return new Date(d.getTime()-off*60000).toISOString().slice(0,10); }
+const today = () => toISO(new Date());
+const MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const DAYS=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+function pretty(iso){ const d=new Date(iso+'T12:00:00'); return { main: d.getDate()+' '+MONTHS[d.getMonth()]+' '+d.getFullYear(), sub: DAYS[d.getDay()] }; }
+function short(iso){ const d=new Date(iso+'T12:00:00'); return d.getDate()+' '+MONTHS[d.getMonth()]; }
+function fmt(n){ n=Math.round(Number(n)||0); return (n<0?'−':'')+CUR+Math.abs(n).toLocaleString('en-IN'); }
+function esc(s){ const d=document.createElement('div'); d.textContent=s==null?'':String(s); return d.innerHTML; }
+function toast(m){ const t=document.getElementById('toast'); t.textContent=m; t.classList.add('show'); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove('show'),1900); }
+function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
+const $ = id => document.getElementById(id);
+
+/* ---------- encryption (same scheme as Cash Book) ---------- */
+const TE=new TextEncoder(), TD=new TextDecoder();
+let cryptoKey=null, readFailed=false;
+function u8ToB64(u8){ let s=''; for(let i=0;i<u8.length;i++) s+=String.fromCharCode(u8[i]); return btoa(s); }
+function b64ToU8(b){ const s=atob(b); const u=new Uint8Array(s.length); for(let i=0;i<s.length;i++) u[i]=s.charCodeAt(i); return u; }
+async function deriveKey(pass,salt){ const base=await crypto.subtle.importKey('raw',TE.encode(pass),'PBKDF2',false,['deriveKey']); return crypto.subtle.deriveKey({name:'PBKDF2',salt,iterations:250000,hash:'SHA-256'},base,{name:'AES-GCM',length:256},false,['encrypt','decrypt']); }
+async function encryptJSON(o,key){ key=key||cryptoKey; const iv=crypto.getRandomValues(new Uint8Array(12)); const ct=new Uint8Array(await crypto.subtle.encrypt({name:'AES-GCM',iv},key,TE.encode(JSON.stringify(o)))); return {iv:u8ToB64(iv),ct:u8ToB64(ct)}; }
+async function decryptJSON(e,key){ key=key||cryptoKey; const pt=await crypto.subtle.decrypt({name:'AES-GCM',iv:b64ToU8(e.iv)},key,b64ToU8(e.ct)); return JSON.parse(TD.decode(pt)); }
+async function verifyKey(key,meta){ try{ const r=await decryptJSON(meta.check,key); return r&&r.ok==='salary'; }catch(e){ return false; } }
+function idbOpen(){ return new Promise((res,rej)=>{ const r=indexedDB.open('salary-keys',1); r.onupgradeneeded=()=>r.result.createObjectStore('k'); r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); }); }
+async function idbGet(k){ try{ const d=await idbOpen(); return await new Promise((res,rej)=>{ const q=d.transaction('k').objectStore('k').get(k); q.onsuccess=()=>res(q.result); q.onerror=()=>rej(q.error); }); }catch(e){ return null; } }
+async function idbSet(k,v){ try{ const d=await idbOpen(); await new Promise((res,rej)=>{ const t=d.transaction('k','readwrite'); t.objectStore('k').put(v,k); t.oncomplete=res; t.onerror=()=>rej(t.error); }); }catch(e){} }
+async function idbDel(k){ try{ const d=await idbOpen(); await new Promise((res,rej)=>{ const t=d.transaction('k','readwrite'); t.objectStore('k').delete(k); t.oncomplete=res; t.onerror=()=>rej(t.error); }); }catch(e){} }
+
+/* ---------- storage ---------- */
+const memStore = {};   // demo mode only
+async function rawGet(key){
+  if(DEMO) return memStore[key] ? JSON.parse(JSON.stringify(memStore[key])) : null;
+  const s = await fb.F.getDoc(fb.F.doc(fb.db, COL, key));
+  if(!s.exists()) return null; const d=s.data(); if(!d.enc) return null; return await decryptJSON(d.enc);
+}
+async function rawSet(key, v){
+  if(DEMO){ memStore[key] = JSON.parse(JSON.stringify(v)); return; }
+  await fb.F.setDoc(fb.F.doc(fb.db, COL, key), { enc: await encryptJSON(v), updatedAt: Date.now() });
+}
+async function safeGet(key){ try{ return await rawGet(key); }catch(e){ console.error(e); readFailed=true; toast('Could not load — check connection'); return null; } }
+async function safeSet(key,v){
+  if(readFailed){ toast('Connection problem — close and reopen the app'); return false; }
+  try{ await rawSet(key,v); return true; }catch(e){ console.error(e); toast('Save failed — try again'); return false; }
+}
+// read-latest → change → write (so two phones don't overwrite each other)
+async function mutate(key, empty, fn){
+  readFailed = false;
+  const cur = (await safeGet(key)) || empty();
+  if(readFailed) return null;
+  fn(cur);
+  return (await safeSet(key, cur)) ? cur : null;
+}
+
+/* ---------- state ---------- */
+let cfg=null, me=null, months={}, hisabs=[], allLoaded=false;
+const S = { tab:'entry', date: today(), shift:'Day', unit:null, quality:'Special', sel:{}, hours:{}, ghori:'', note:'', adjust:true,
+  per:'month', person:'', month: today().slice(0,7), from: today().slice(0,8)+'01', to: today(), sub:'workers',
+  advEmp:'', hisEmp:'', hisDate: today(), hisPaid:'', hisAction:'carry', setTab:'emps' };
+
+const can = {
+  salary: () => me && (me.type==='owner' || (me.perms && me.perms.salary)),
+  advance: () => me && (me.type==='owner' || me.type==='accountant'),
+  hisab: () => me && (me.type==='owner' || (me.type==='accountant' && me.perms && me.perms.salary)),
+  settings: () => me && me.type==='owner',
+  delete: () => me && me.type==='owner'
+};
+const roleById = id => cfg.roles.find(r=>r.id===id) || { name:'?', color:'#999' };
+const empById = id => cfg.employees.find(e=>e.id===id) || { name:'(hata diya)', id };
+const ym = iso => iso.slice(0,7);
+
+async function loadMonth(m, force){
+  if(months[m] && !force) return months[m];
+  const d = (await safeGet('m:'+m)) || { entries:[], advances:[] };
+  months[m] = d; return d;
+}
+async function loadAll(){
+  const meta = (await safeGet('meta')) || { months:[] };
+  const list = meta.months || [];
+  await Promise.all(list.map(m => loadMonth(m, true)));
+  hisabs = ((await safeGet('hisab')) || { list:[] }).list;
+  allLoaded = true;
+}
+async function touchMonth(m){
+  const meta = (await safeGet('meta')) || { months:[] };
+  if(!meta.months.includes(m)){ meta.months.push(m); meta.months.sort(); await safeSet('meta', meta); }
+}
+function allEntries(){ return Object.values(months).flatMap(m => m.entries||[]); }
+function allAdvances(){ return Object.values(months).flatMap(m => m.advances||[]); }
+
+/* ---------- default config ---------- */
+const SEED = {
+  r_k: ['Amit Kannauj','Amit Knp Karigar','Amit Lko','Anoop Karigar','Arjun','Bauwa','Dinesh','Lallit','Manoj','Pintu','Pradeep Extra','Puttan Karigar','RajKumar','Ram Naresh','Ramu','Ravi Karigar','Sachin','Sandeep Karigar','Surendra Karigar','Tiwari Karigar','Vikash Karigar','Vimal Karigar'],
+  r_h: ['Arjun','Balendra Helper','Bauwa','Chhotu Helper','Jitendra Helper','Monu Helper','Pradeep Extra','Rampal','Ramshankar','Sahedev','Sandeep Helper','Sanjeewan','Sanoj Helper','Vikas Helper'],
+  r_e: ['Arjun','Pradeep Extra','Ramshankar','Sahedev','Virendra (Bauwa)','Virendra LKO']
+};
+function defaultConfig(owner, seed){
+  const from = '2020-01-01';
+  const c = {
+    users: [owner],
+    roles: [
+      { id:'r_k', name:'Karigar', color:'#1d5a52', payType:'daily', otMode:'ghori', countsForBasic:true, basicHours:8, rates:[{from, daily:725, hourly:0, monthly:0}] },
+      { id:'r_h', name:'Helper', color:'#3d5a9e', payType:'daily', otMode:'ghori', countsForBasic:false, basicHours:8, rates:[{from, daily:625, hourly:0, monthly:0}] },
+      { id:'r_e', name:'Extra', color:'#b5651d', payType:'daily', otMode:'hours', countsForBasic:false, basicHours:8, rates:[{from, daily:500, hourly:0, monthly:0}] }
+    ],
+    units: ['Unit 1','Unit 2'],
+    targets: { Special:6, Chalu:8 },
+    employees: [], nextNo: 1
+  };
+  if(seed){
+    const map = {};
+    for(const rid of ['r_k','r_h','r_e']) for(const n of SEED[rid]){ (map[n] = map[n] || []).push(rid); }
+    for(const n of Object.keys(map).sort()){ c.employees.push({ id:'E'+String(c.nextNo++).padStart(3,'0'), name:n, roles:map[n], active:true, from: today() }); }
+  }
+  return c;
+}
+
+/* ---------- render ---------- */
+const ICON = {
+  entry:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+  salary:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>',
+  advance:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M7 7h10M7 12h10M10 17l4-5"/><rect x="3" y="3" width="18" height="18" rx="4"/></svg>',
+  hisab:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 11l3 3 8-8"/><path d="M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9"/></svg>',
+  settings:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>'
+};
+function renderTabs(){
+  const t = [['entry','Entry']];
+  if(can.salary()) t.push(['salary','Salary']);
+  if(can.advance()) t.push(['advance','Advance']);
+  if(can.hisab()) t.push(['hisab','Settle']);
+  if(can.settings()) t.push(['settings','Settings']);
+  $('tabs').style.display = t.length > 1 ? 'flex' : 'none';
+  $('tabsIn').innerHTML = t.map(([k,l])=>`<button class="${S.tab===k?'on':''}" onclick="go('${k}')">${ICON[k]}${l}</button>`).join('');
+}
+async function go(tab){ S.tab = tab; if((tab==='salary'||tab==='hisab') && !allLoaded){ $('view').innerHTML='<div class="empty">Loading data…</div>'; renderTabs(); await loadAll(); } render(); window.scrollTo(0,0); }
+function render(){
+  const typeName = { owner:'Owner', supervisor:'Supervisor', accountant:'Accountant' }[me.type];
+  $('who').textContent = me.name + ' · ' + typeName;
+  renderTabs();
+  ({ entry:renderEntry, salary:renderSalary, advance:renderAdvance, hisab:renderHisab, settings:renderSettings })[S.tab]();
+}
+function dateBar(){
+  const p = pretty(S.date);
+  return `<div class="datebar"><button onclick="shiftDate(-1)">‹</button><div class="dl">${p.main}<small>${p.sub}${S.date===today()?' · Today':''}</small><input type="date" value="${S.date}" max="${today()}" onchange="setDate(this.value)"></div><button onclick="shiftDate(1)">›</button></div>`;
+}
+async function shiftDate(n){ const d=addDays(S.date,n); if(d>today()) return; S.date=d; await loadMonth(ym(S.date)); render(); }
+async function setDate(v){ if(!v) return; S.date=v; await loadMonth(ym(S.date)); render(); }
+
+/* ---------- ENTRY ---------- */
+function activeEmps(roleId){ return cfg.employees.filter(e => e.active!==false && (e.roles||[]).includes(roleId)).sort((a,b)=>a.name.localeCompare(b.name)); }
+function renderEntry(){
+  if(!S.unit || !cfg.units.includes(S.unit)) S.unit = cfg.units[0];
+  const dailyRoles = cfg.roles.filter(r => r.payType!=='monthly');
+  const K = dailyRoles.filter(r=>r.countsForBasic).reduce((n,r)=> n + (S.sel[r.id]?S.sel[r.id].size:0), 0);
+  const anyGhori = dailyRoles.some(r=> r.otMode==='ghori' && S.sel[r.id] && S.sel[r.id].size);
+  const basicG = K * (Number(cfg.targets[S.quality])||0);
+  const g = Number(S.ghori);
+  const short = anyGhori && K>0 && S.ghori!=='' && g < basicG;
+  const roleCards = dailyRoles.map(r=>{
+    const sel = S.sel[r.id] || new Set();
+    const emps = activeEmps(r.id);
+    const hrsRows = r.otMode==='hours' ? [...sel].map(id=>`<div class="hrs"><span>${esc(empById(id).name)} — OT hours</span><input type="number" inputmode="decimal" min="0" step="0.5" value="${S.hours[r.id+':'+id]||''}" placeholder="0" oninput="S.hours['${r.id}:${id}']=this.value"></div>`).join('') : '';
+    return `<div class="card"><div class="ctitle"><span>${esc(r.name)}</span><span class="count">${sel.size}</span></div>
+      ${emps.length ? `<div class="chips">${emps.map(e=>`<div class="chip ${sel.has(e.id)?'on':''}" data-n="${esc(e.name.toLowerCase())}" style="--rc:${r.color}" onclick="toggleEmp('${r.id}','${e.id}')">${esc(e.name)}</div>`).join('')}</div>` : `<div class="note">No employees in this role. Go to Settings → Employees.</div>`}
+      ${hrsRows ? `<div style="margin-top:10px">${hrsRows}</div>`:''}</div>`;
+  }).join('');
+  const m = months[ym(S.date)] || { entries:[] };
+  const todays = (m.entries||[]).filter(e=>e.date===S.date).sort((a,b)=>(a.at||0)-(b.at||0));
+  const mine = me.type==='owner' ? todays : todays.filter(e=>e.by===me.id);
+  $('view').innerHTML = `
+    ${dateBar()}
+    <div class="card">
+      <div class="row" style="margin-bottom:10px">
+        <div><div class="lbl">Unit</div><select onchange="S.unit=this.value">${cfg.units.map(u=>`<option ${u===S.unit?'selected':''}>${esc(u)}</option>`).join('')}</select></div>
+        <div><div class="lbl">Shift</div><div class="seg"><button class="${S.shift==='Day'?'on':''}" onclick="S.shift='Day';render()">Day</button><button class="${S.shift==='Night'?'on':''}" onclick="S.shift='Night';render()">Night</button></div></div>
+      </div>
+      <div class="lbl">Quality</div>
+      <div class="seg"><button class="${S.quality==='Special'?'on gold':''}" onclick="S.quality='Special';render()">Special</button><button class="${S.quality==='Chalu'?'on gold':''}" onclick="S.quality='Chalu';render()">Chalu</button></div>
+    </div>
+    <div class="search"><input type="text" id="nameSearch" placeholder="🔍  Search name…" value="${esc(S.q||'')}" oninput="S.q=this.value;applyFilter()" autocomplete="off"></div>
+    ${roleCards}
+    <div class="card">
+      <div class="lbl">Total ghori (whole group)</div>
+      <input type="number" inputmode="numeric" class="big-num" id="ghoriIn" value="${S.ghori}" placeholder="0" oninput="S.ghori=this.value;checkShort()">
+      <div id="shortBox">${short?shortHtml(basicG-g):''}</div>
+      <div class="lbl" style="margin-top:12px">Note (optional)</div>
+      <input type="text" value="${esc(S.note)}" placeholder="Anything to note" oninput="S.note=this.value">
+      <button class="btn mt" id="saveBtn" onclick="saveEntry()">Save entry</button>
+    </div>
+    <div class="sec">${me.type==='owner'?'Entries for this day':'Your entries for this day'} (${mine.length})</div>
+    <div class="card" style="padding:4px 14px">${mine.length ? mine.map(e=>entryRow(e)).join('') : '<div class="empty">No entries yet.</div>'}</div>`;
+  applyFilter();
+}
+function applyFilter(){
+  const q=(S.q||'').trim().toLowerCase();
+  document.querySelectorAll('.chip[data-n]').forEach(c=>{ c.style.display = (!q || c.classList.contains('on') || c.dataset.n.includes(q)) ? '' : 'none'; });
+}
+function shortHtml(k){ return `<div class="warn"><b>${k} ghori short</b> of basic — no OT today.<label><input type="checkbox" ${S.adjust?'checked':''} onchange="S.adjust=this.checked"> Deduct this shortfall from their next OT</label></div>`; }
+function checkShort(){
+  const K = cfg.roles.filter(r=>r.countsForBasic).reduce((n,r)=> n + (S.sel[r.id]?S.sel[r.id].size:0), 0);
+  const basicG = K * (Number(cfg.targets[S.quality])||0);
+  const g = Number(S.ghori);
+  $('shortBox').innerHTML = (K>0 && S.ghori!=='' && g < basicG) ? shortHtml(basicG-g) : '';
+}
+function entryRow(e){
+  const counts = {}; for(const p of e.people) counts[p.role]=(counts[p.role]||0)+1;
+  const tags = Object.entries(counts).map(([rid,n])=>{ const r=roleById(rid); return `<span class="tag" style="background:${r.color}">${esc(r.name)} ${n}</span>`; }).join('');
+  const by = (cfg.users.find(u=>u.id===e.by)||{}).name || '';
+  return `<div class="list-row ${me.type==='owner'?'tap':''}" ${me.type==='owner'?`onclick="showEntry('${e.id}')"`:''}><div class="main"><div class="t">${esc(e.unit)} · ${e.shift} · ${e.quality}</div><div class="s">${tags} ${e.ghori?'· '+e.ghori+' ghori':''} ${by?'· '+esc(by):''}</div></div>${can.delete()?`<button class="x" onclick="event.stopPropagation();delEntry('${e.id}')">✕</button>`:''}</div>`;
+}
+function toggleEmp(rid, eid){ const s = S.sel[rid] || (S.sel[rid]=new Set()); s.has(eid)?s.delete(eid):s.add(eid); render(); }
+async function saveEntry(){
+  const people = [];
+  for(const r of cfg.roles) for(const id of (S.sel[r.id]||[])) people.push({ emp:id, role:r.id, otHours: r.otMode==='hours' ? (Number(S.hours[r.id+':'+id])||0) : 0 });
+  if(!people.length){ toast('Tick at least one name'); return; }
+  const needsGhori = people.some(p=>roleById(p.role).otMode==='ghori');
+  if(needsGhori && (S.ghori==='' || Number(S.ghori)<0)){ toast('Enter total ghori'); return; }
+  const ids = people.map(p=>p.emp);
+  if(new Set(ids).size !== ids.length){ toast('Same person ticked in two roles — remove one'); return; }
+  const m = months[ym(S.date)] || { entries:[] };
+  const clash = (m.entries||[]).filter(e=>e.date===S.date).flatMap(e=>e.people.map(p=>p.emp)).filter(id=>ids.includes(id));
+  if(clash.length && !confirm('These people are already in an entry today:\n' + [...new Set(clash)].map(id=>empById(id).name).join(', ') + '\n\nSave anyway?')) return;
+  const K = people.filter(p=>roleById(p.role).countsForBasic).length;
+  const basicG = K * (Number(cfg.targets[S.quality])||0);
+  const entry = { id:uid(), date:S.date, shift:S.shift, unit:S.unit, quality:S.quality, ghori: needsGhori?Number(S.ghori):0, people, note:S.note.trim(), adjust: Number(S.ghori) < basicG ? !!S.adjust : false, by:me.id, at:Date.now() };
+  $('saveBtn').disabled = true; $('saveBtn').textContent = 'Saving…';
+  const mm = ym(S.date);
+  const res = await mutate('m:'+mm, ()=>({entries:[],advances:[]}), d=>{ (d.entries=d.entries||[]).push(entry); });
+  if(res){ months[mm] = res; await touchMonth(mm); S.sel={}; S.hours={}; S.ghori=''; S.note=''; S.adjust=true; S.q=''; toast('Entry saved ✓'); }
+  render();
+}
+async function delEntry(id){
+  if(!confirm('Delete this entry?')) return;
+  const mm = ym(S.date);
+  const res = await mutate('m:'+mm, ()=>({entries:[],advances:[]}), d=>{ d.entries=(d.entries||[]).filter(e=>e.id!==id); });
+  if(res){ months[mm]=res; toast('Deleted'); closeSheet(); }
+  render();
+}
+async function showEntry(id){
+  if(!allLoaded) await loadAll();
+  const { lines } = computeLines(allEntries(), cfg);
+  const e = allEntries().find(x=>x.id===id); if(!e) return;
+  const L = lines.filter(l=>l.entryId===id);
+  const K = e.people.filter(p=>roleById(p.role).countsForBasic).length;
+  const basicG = K*(Number(cfg.targets[e.quality])||0);
+  openSheet(`<h2>${esc(e.unit)} · ${e.shift} · ${e.quality}</h2><p class="sub">${pretty(e.date).main} · ${e.ghori} ghori · Basic ${basicG} ghori · OT ${Math.max(0,e.ghori-basicG)} ghori${e.note?' · '+esc(e.note):''}</p>
+    <table class="t"><tr><th>Name</th><th>Role</th><th class="n">Duty</th><th class="n">OT</th><th class="n">Total</th></tr>
+    ${L.map(l=>`<tr><td>${esc(empById(l.emp).name)}${otNote(l)?`<div class="note">${otNote(l)}</div>`:''}${l.kamiCut?`<div class="note">shortfall ${num(l.kamiCut)} ghori deducted</div>`:''}</td><td>${esc(roleById(l.role).name)}</td><td class="n">${fmt(l.basic)}</td><td class="n">${fmt(l.ot)}</td><td class="n"><b>${fmt(l.total)}</b></td></tr>`).join('')}</table>
+    <button class="btn danger mt" onclick="delEntry('${id}')">Delete entry</button><button class="btn ghost mt" onclick="closeSheet()">Close</button>`);
+}
+
+/* ---------- SALARY / DASHBOARD ---------- */
+function period(){
+  if(S.per==='month'){ const [y,m]=S.month.split('-').map(Number); return { from:S.month+'-01', to:S.month+'-'+String(new Date(y,m,0).getDate()).padStart(2,'0') }; }
+  return { from:S.from, to:S.to };
+}
+function renderSalary(){
+  const { from, to } = period();
+  const { lines } = computeLines(allEntries(), cfg);
+  const sm = summarize(lines, allAdvances(), cfg, from, to);
+  const emps = sm.emps.sort((a,b)=> b.total-a.total);
+  const maxT = Math.max(1, ...emps.map(e=>e.total));
+  let body = '';
+  if(S.sub==='workers'){
+    body = emps.length ? emps.map(s=>{ const e=empById(s.emp); const roles=Object.keys(s.byRole).map(rid=>{const r=roleById(rid);return `<span class="tag" style="background:${r.color}">${esc(r.name)}</span>`;}).join('');
+      return `<div class="list-row tap" onclick="showWorker('${s.emp}')"><div class="avatar" style="background:${PALETTE[(parseInt(String(s.emp).replace(/\D/g,''))||0)%PALETTE.length]}">${esc((e.name||'?').slice(0,1))}</div><div class="main"><div class="t">${esc(e.name)} ${roles}</div><div class="s">${s.days} days · Duty ${fmt(s.basic)} · OT ${fmt(s.ot)}${s.adv?' · Adv '+fmt(s.adv):''}</div><div class="bar"><i style="width:${Math.round(s.total/maxT*100)}%"></i></div></div><div style="text-align:right"><div class="amt">${fmt(s.net)}</div><div class="note">${s.adv?'net':'total'}</div></div></div>`; }).join('') : '<div class="empty">No data for this period.</div>';
+  } else if(S.sub==='units'){
+    const u = Object.entries(sm.units).sort((a,b)=>b[1].total-a[1].total);
+    body = u.length ? `<table class="t"><tr><th>Unit</th><th class="n">Man-days</th><th class="n">Ghori</th><th class="n">OT</th><th class="n">Salary</th></tr>${u.map(([k,v])=>`<tr><td><b>${esc(k)}</b></td><td class="n">${v.mandays}</td><td class="n">${v.ghori}</td><td class="n">${fmt(v.ot)}</td><td class="n">${fmt(v.total)}</td></tr>`).join('')}</table>` : '<div class="empty">No data.</div>';
+  } else if(S.sub==='roles'){
+    const r = Object.entries(sm.roles);
+    body = r.length ? `<table class="t"><tr><th>Role</th><th class="n">Man-days</th><th class="n">OT</th><th class="n">Salary</th></tr>${r.map(([k,v])=>`<tr><td><span class="tag" style="background:${roleById(k).color}">${esc(roleById(k).name)}</span></td><td class="n">${v.mandays}</td><td class="n">${fmt(v.ot)}</td><td class="n">${fmt(v.total)}</td></tr>`).join('')}</table>` : '<div class="empty">No data.</div>';
+  } else {
+    const days = {}; for(const l of sm.lines){ const d=days[l.date]||(days[l.date]={n:0,t:0}); d.n++; d.t+=l.total; }
+    const ds = Object.entries(days).sort((a,b)=>a[0]<b[0]?1:-1);
+    body = ds.length ? ds.map(([d,v])=>`<div class="list-row tap" onclick="jumpEntry('${d}')"><div class="main"><div class="t">${pretty(d).main}</div><div class="s">${v.n} people</div></div><div class="amt">${fmt(v.t)}</div></div>`).join('') : '<div class="empty">No data.</div>';
+  }
+  $('view').innerHTML = `
+    <div class="card">
+      <div class="seg" style="margin-bottom:10px"><button class="${S.per==='month'?'on':''}" onclick="S.per='month';render()">Month</button><button class="${S.per==='range'?'on':''}" onclick="S.per='range';render()">Period</button></div>
+      <div class="field"><select onchange="S.person=this.value;render()"><option value="">👥  All workers</option>${cfg.employees.slice().sort((a,b)=>a.name.localeCompare(b.name)).map(e=>`<option value="${e.id}" ${e.id===S.person?'selected':''}>${esc(e.name)} (${e.id})</option>`).join('')}</select></div>
+      ${S.per==='month' ? `<input type="month" value="${S.month}" onchange="S.month=this.value;render()">` : `<div class="row"><input type="date" value="${S.from}" onchange="S.from=this.value;render()"><input type="date" value="${S.to}" onchange="S.to=this.value;render()"></div>`}
+    </div>
+    ${S.person ? workerHtml(S.person, true) + (can.hisab()?`<button class="btn gold mt" onclick="settlePerson('${S.person}')">Settle this person's account</button>`:'') + `<button class="btn ghost mt" onclick="S.person='';render()">← Back to all workers</button>` : `
+    <div class="kpis">
+      <div class="kpi hero"><div class="k">Total salary (${short(from)} – ${short(to)})</div><div class="v">${fmt(sm.tot.total)}</div></div>
+      <div class="kpi"><div class="k">Duty amount</div><div class="v">${fmt(sm.tot.total-sm.tot.ot)}</div></div>
+      <div class="kpi"><div class="k">Overtime amount</div><div class="v">${fmt(sm.tot.ot)}</div></div>
+      <div class="kpi"><div class="k">Advance</div><div class="v bad">${fmt(sm.tot.adv)}</div></div>
+      <div class="kpi"><div class="k">Net payable</div><div class="v good">${fmt(sm.tot.net)}</div></div>
+      <div class="kpi"><div class="k">People</div><div class="v">${sm.emps.length}</div></div>
+    </div>
+    <div class="subtabs">${[['workers','By worker'],['units','By unit'],['roles','By role'],['days','By day']].map(([k,l])=>`<button class="${S.sub===k?'on':''}" onclick="S.sub='${k}';render()">${l}</button>`).join('')}</div>
+    <div class="card" style="padding:4px 14px">${body}</div>
+    `}
+    <button class="btn ghost mt" onclick="exportXlsx()">Download Excel</button>
+    <button class="btn ghost mt" onclick="refreshAll()">Refresh data</button>`;
+}
+async function refreshAll(){ await loadAll(); toast('Refreshed'); render(); }
+async function jumpEntry(d){ S.date=d; await loadMonth(ym(d)); go('entry'); }
+const num = n => (Math.round(n*100)/100).toString();
+function otNote(l){
+  if(l.otMode==='ghori' && l.otGhori>0) return `OT ${num(l.otGhori)} ghori ÷ ${l.shareN} ${esc(roleById(l.role).name)} = ${num(l.otGhori/l.shareN)} each`;
+  if(l.otHours) return `OT ${l.otHours} hrs`;
+  return '';
+}
+function lineNote(l){
+  const bits=[esc(l.unit), l.quality];
+  const o=otNote(l); if(o) bits.push(o);
+  if(l.kamiCut) bits.push('shortfall −'+num(l.kamiCut)+' ghori');
+  if(l.short) bits.push(l.short+' ghori short — no OT');
+  return bits.join(' · ');
+}
+function qualityTable(byQ){
+  const qs = ['Special','Chalu'].filter(q=>byQ[q]);
+  if(!qs.length) return '';
+  return `<div class="lbl" style="margin-top:12px">Special / Chalu</div><table class="t"><tr><th>Quality</th><th class="n">Days</th><th class="n">OT ghori (share)</th><th class="n">Duty</th><th class="n">OT</th></tr>${qs.map(q=>{ const v=byQ[q]; return `<tr><td><b>${q}</b><div class="note">÷ ${q==='Special'?cfg.targets.Special:cfg.targets.Chalu} ghori</div></td><td class="n">${v.days}</td><td class="n">${num(v.share)}<div class="note">${v.otDays} OT days</div></td><td class="n">${fmt(v.duty)}</td><td class="n">${fmt(v.ot)}</td></tr>`; }).join('')}</table>`;
+}
+function dailyTable(L){
+  return `<table class="t"><tr><th>Date</th><th>Work</th><th class="n">Duty</th><th class="n">OT</th><th class="n">Total</th></tr>${L.map(l=>`<tr><td>${short(l.date)}</td><td>${esc(roleById(l.role).name)}<div class="note">${lineNote(l)}</div></td><td class="n">${fmt(l.basic)}</td><td class="n">${fmt(l.ot)}</td><td class="n">${fmt(l.total)}</td></tr>`).join('')}</table>`;
+}
+function workerHtml(id, inline){
+  const { from, to } = period();
+  const { lines, pending } = computeLines(allEntries(), cfg);
+  const sm = summarize(lines, allAdvances(), cfg, from, to);
+  const e = empById(id);
+  const s = sm.emps.find(x=>x.emp===id) || { total:0, net:0, ot:0, adv:0, days:0, byRole:{}, byUnit:{}, monthly:0 };
+  const L = sm.lines.filter(l=>l.emp===id).sort((a,b)=>a.date<b.date?-1:1);
+  const A = sm.advances.filter(a=>a.emp===id);
+  const H = hisabs.filter(h=>h.emp===id && h.date>=from && h.date<=to);
+  const lastH = hisabs.filter(h=>h.emp===id).sort((a,b)=>a.date<b.date?-1:1).pop();
+  const ghori = L.reduce((t,l)=>t+l.otGhori,0);
+  const hours = L.reduce((t,l)=>t+l.otHours,0);
+  const head = `<div class="row" style="align-items:center;gap:12px;margin-bottom:10px"><div class="avatar" style="flex:0 0 46px;width:46px;height:46px;font-size:18px;background:${PALETTE[(parseInt(String(id).replace(/\D/g,''))||0)%PALETTE.length]}">${esc((e.name||'?').slice(0,1))}</div><div><div style="font-family:Fraunces,serif;font-weight:700;font-size:20px">${esc(e.name)}</div><div class="note">${esc(e.id)} · ${(e.roles||[]).map(r=>`<span class="tag" style="background:${roleById(r).color}">${esc(roleById(r).name)}</span>`).join('')}</div></div></div>`;
+  return `${head}
+    ${pending[id]?`<div class="warn" style="margin:0 0 12px">${pending[id]} ghori shortfall pending — will be deducted from next OT</div>`:''}
+    <div class="kpis">
+      <div class="kpi hero"><div class="k">Net payable (${short(from)} – ${short(to)})</div><div class="v">${fmt(s.net)}</div></div>
+      <div class="kpi"><div class="k">Duty amount</div><div class="v">${fmt(s.basic)}</div><div class="note">${s.days} days${s.monthly?' + monthly':''}</div></div>
+      <div class="kpi"><div class="k">Overtime amount</div><div class="v">${fmt(s.ot)}</div><div class="note">${hours?hours+' hrs':''}</div></div>
+      <div class="kpi"><div class="k">Total earned</div><div class="v">${fmt(s.total)}</div></div>
+      <div class="kpi"><div class="k">Advance</div><div class="v bad">${fmt(s.adv)}</div></div>
+    </div>
+    <div class="card"><div class="lbl">By role</div>${Object.keys(s.byRole).length||s.monthly?`<table class="t">${Object.entries(s.byRole).map(([rid,v])=>`<tr><td><span class="tag" style="background:${roleById(rid).color}">${esc(roleById(rid).name)}</span></td><td class="n">${v.days} days</td><td class="n">Duty ${fmt(v.total-v.ot)}</td><td class="n">OT ${fmt(v.ot)}</td></tr>`).join('')}${s.monthly?`<tr><td>Monthly (fixed)</td><td></td><td class="n">Duty ${fmt(s.monthly)}</td><td></td></tr>`:''}</table>`:'<div class="note">No work in this period.</div>'}
+      ${qualityTable(s.byQ||{})}
+      ${Object.keys(s.byUnit).length?`<div class="lbl" style="margin-top:12px">By unit</div><table class="t">${Object.entries(s.byUnit).map(([u,v])=>`<tr><td>${esc(u)}</td><td class="n">${v.days} days</td><td class="n"><b>${fmt(v.total)}</b></td></tr>`).join('')}</table>`:''}</div>
+    ${L.length?`<div class="card"><div class="lbl">Daily breakdown</div>${dailyTable(L)}</div>`:''}
+    ${A.length?`<div class="card"><div class="lbl">Advances</div><table class="t">${A.map(a=>`<tr><td>${short(a.date)}</td><td>${esc(a.note||'')}</td><td class="n bad">${fmt(a.amount)}</td></tr>`).join('')}</table></div>`:''}
+    <div class="card"><div class="lbl">Settlements</div>${H.length?`<table class="t">${H.map(h=>`<tr><td>${short(h.date)}</td><td class="n">Due ${fmt(h.due)}</td><td class="n">Paid ${fmt(h.paid)}</td><td class="n">${h.action==='carry'?'Carry '+fmt(h.balance):'Nil'}</td></tr>`).join('')}</table>`:`<div class="note">${lastH?'Last settled up to '+pretty(lastH.date).main+(lastH.action==='carry'?' · carried '+fmt(lastH.balance):''):'Never settled yet.'}</div>`}</div>
+    ${inline?'':'<button class="btn ghost mt" onclick="closeSheet()">Close</button>'}`;
+}
+function showWorker(id){ S.person=id; render(); window.scrollTo(0,0); }
+let xlsxP=null;
+function loadXLSX(){ if(window.__xlsxStyled) return Promise.resolve(); return xlsxP || (xlsxP = new Promise((res,rej)=>{ const s=document.createElement('script'); s.src='https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js'; s.onload=()=>{ window.__xlsxStyled=true; res(); }; s.onerror=rej; document.head.appendChild(s); })); }
+
+/* Balance a worker carried INTO the period (after their last settlement before `from`). */
+function pendingBefore(empId, from, lines, advances){
+  const lastH = hisabs.filter(h=>h.emp===empId && h.date < from).sort((a,b)=>a.date<b.date?-1:1).pop();
+  const start = lastH ? addDays(lastH.date,1) : '2000-01-01';
+  const end = addDays(from,-1);
+  let v = lastH && lastH.action==='carry' ? Number(lastH.balance)||0 : 0;
+  if(start <= end){
+    v += lines.filter(l=>l.emp===empId && l.date>=start && l.date<=end).reduce((t,l)=>t+l.total,0);
+    const emp = empById(empId);
+    v += monthlyAccrual(cfg, emp, lastH ? start : (emp.from || end), end);
+    v -= advances.filter(a=>a.emp===empId && a.date>=start && a.date<=end).reduce((t,a)=>t+(Number(a.amount)||0),0);
+  }
+  return Math.round(v);
+}
+
+function buildRegister(X, title, shift, from, to, lines, advances, empIds){
+  const BORDER = { top:{style:'thin',color:{rgb:'999999'}}, bottom:{style:'thin',color:{rgb:'999999'}}, left:{style:'thin',color:{rgb:'999999'}}, right:{style:'thin',color:{rgb:'999999'}} };
+  const st = (o={}) => ({ border:BORDER, alignment:{horizontal:'center',vertical:'center',wrapText:true}, font:{sz:11, ...(o.font||{})}, ...(o.fill?{fill:{fgColor:{rgb:o.fill}}}:{}) });
+  const L = lines.filter(l=>l.date>=from && l.date<=to && (!shift || l.shift===shift));
+  const dates=[]; for(let d=from; d<=to; d=addDays(d,1)) dates.push(d);
+  const cols = empIds.length*3 + 1;
+  const ws = {}; const merges=[];
+  const put = (r,c,v,style,fmt) => { const ref = X.utils.encode_cell({r,c}); const cell = { v, t: typeof v==='number' ? 'n' : 's', s: style || st() }; if(fmt) cell.z = fmt; ws[ref]=cell; };
+  const RS = '"₹"#,##0';
+  // title
+  put(0,0,title, { font:{bold:true,sz:16}, alignment:{horizontal:'left'} }); merges.push({s:{r:0,c:0},e:{r:0,c:Math.max(0,cols-1)}});
+  put(1,0,'Date', st({font:{bold:true,sz:12}, fill:'EFE7D6'})); put(2,0,'', st({fill:'EFE7D6'})); merges.push({s:{r:1,c:0},e:{r:2,c:0}});
+  const byEmpDate = {};
+  for(const l of L){ (byEmpDate[l.emp+'|'+l.date] = byEmpDate[l.emp+'|'+l.date] || []).push(l); }
+  empIds.forEach((id,i)=>{
+    const c = 1+i*3; const e = empById(id); const r0 = roleById((e.roles||[])[0]);
+    const fill = (r0.color||'#555555').replace('#','');
+    put(1,c,e.name, st({font:{bold:true,color:{rgb:'FFFFFF'},sz:12}, fill})); put(1,c+1,'',st({fill})); put(1,c+2,'',st({fill}));
+    merges.push({s:{r:1,c},e:{r:1,c:c+2}});
+    ['Att.','Spl','Chlu'].forEach((h,k)=>put(2,c+k,h, st({font:{bold:true}, fill:'F7F1E4'})));
+  });
+  // date rows
+  dates.forEach((d,ri)=>{
+    const r = 3+ri; const dt = new Date(d+'T12:00:00');
+    put(r,0, dt.getDate()+' '+MONTHS[dt.getMonth()]+' '+DAYS[dt.getDay()].slice(0,3), st({font:{bold:true}}));
+    empIds.forEach((id,i)=>{
+      const c = 1+i*3; const ls = byEmpDate[id+'|'+d] || [];
+      const multi = (empById(id).roles||[]).length > 1;
+      const att = ls.length ? (multi ? ls.map(l=>roleById(l.role).name.slice(0,1)).join('+') : ls.length) : '';
+      put(r,c, att);
+      const fr = q => ls.filter(l=>l.quality===q).map(l=> l.otMode!=='ghori' ? (l.otHours? l.otHours+' hrs OT':'') :  (l.otGhori>0 ? num(l.otGhori)+'/'+l.shareN : '') + (l.kamiCut?' (−'+num(l.kamiCut)+')':'') + (l.short?(l.otGhori>0||l.kamiCut?' ':'')+'short '+l.short:'')).filter(Boolean).join(', ');
+      put(r,c+1, fr('Special'), st({fill: ls.some(l=>l.quality==='Special')?'FBF0D9':undefined}));
+      put(r,c+2, fr('Chalu'), st({fill: ls.some(l=>l.quality==='Chalu')?'E3EFEB':undefined}));
+    });
+  });
+  // footer
+  let r = 3 + dates.length;
+  const shares = new Set([1,2,3,4]); for(const l of L) if(l.otMode==='ghori' && l.shareN) shares.add(l.shareN);
+  const shareList = [...shares].sort((a,b)=>a-b);
+  const label = (txt, fill, fontColor) => put(r,0,txt, st({font:{bold:true, ...(fontColor?{color:{rgb:fontColor}}:{})}, fill: fill||'EFE7D6'}));
+  const per = {};
+  for(const id of empIds){
+    const my = L.filter(l=>l.emp===id);
+    const p = per[id] = { days: my.length, duty: my.reduce((t,l)=>t+l.basic,0), byShare:{}, extraOt: 0, extraHrs: 0, roleDays:{} };
+    for(const l of my){
+      p.roleDays[l.role]=(p.roleDays[l.role]||0)+1;
+      if(l.otMode==='ghori'){ const b = p.byShare[l.shareN] || (p.byShare[l.shareN]={Special:0,Chalu:0,amt:0}); b[l.quality]+=l.otGhori; b.amt+=l.ot; }
+      else if(l.ot){ p.extraOt += l.ot; p.extraHrs += l.otHours; }
+    }
+    if(!shift || shift==='Day'){ const m = monthlyAccrual(cfg, empById(id), from, to); p.duty += m; p.monthly = m; }
+    p.adv = (!shift || shift==='Day') ? advances.filter(a=>a.emp===id && a.date>=from && a.date<=to).reduce((t,a)=>t+(Number(a.amount)||0),0) : 0;
+    p.pending = (!shift || shift==='Day') ? pendingBefore(id, from, lines, advances) : 0;
+    const H = hisabs.filter(h=>h.emp===id && h.date>=from && h.date<=to);
+    p.paid = (!shift || shift==='Day') ? H.reduce((t,h)=>t+(Number(h.paid)||0),0) : 0;
+    p.nil = (!shift || shift==='Day') ? H.filter(h=>h.action==='nil').reduce((t,h)=>t+(Number(h.balance)||0),0) : 0;
+    p.ot = Object.values(p.byShare).reduce((t,b)=>t+b.amt,0) + p.extraOt;
+    p.payable = p.pending + p.duty + p.ot - p.adv;
+    p.remains = p.payable - p.paid - p.nil;
+  }
+  const span3 = (rr, c, v, style, fmt) => { put(rr,c,v,style,fmt); put(rr,c+1,'',style); put(rr,c+2,'',style); merges.push({s:{r:rr,c},e:{r:rr,c:c+2}}); };
+  label('Total Duty'); empIds.forEach((id,i)=>{ const c=1+i*3; put(r,c,per[id].days, st({font:{bold:true}})); put(r,c+1,''); put(r,c+2,''); }); r++;
+  const multiAny = empIds.some(id=>Object.keys(per[id].roleDays).length>1);
+  if(multiAny){ label('Role-wise days'); empIds.forEach((id,i)=>span3(r,1+i*3, Object.entries(per[id].roleDays).map(([rid,n])=>roleById(rid).name+' '+n).join(', '))); r++; }
+  for(const n of shareList){ label('Overtime (Between '+n+')'); empIds.forEach((id,i)=>{ const c=1+i*3; const b=per[id].byShare[n]||{Special:0,Chalu:0}; put(r,c,''); put(r,c+1,'('+num(b.Special)+'/'+n+')'); put(r,c+2,'('+num(b.Chalu)+'/'+n+')'); }); r++; }
+  label('Pending (before '+short(from)+')'); empIds.forEach((id,i)=>span3(r,1+i*3, per[id].pending, st(), RS)); r++;
+  label('Advance Payment'); empIds.forEach((id,i)=>span3(r,1+i*3, per[id].adv, st({font:{color:{rgb:'A13D3D'}}}), RS)); r++;
+  label('Duty'); empIds.forEach((id,i)=>span3(r,1+i*3, per[id].duty, st(), RS)); r++;
+  for(const n of shareList){ label('Overtime (/'+n+')'); empIds.forEach((id,i)=>span3(r,1+i*3, Math.round((per[id].byShare[n]||{amt:0}).amt), st(), RS)); r++; }
+  label('EXTRA (OT hours)', 'C0392B', 'FFFFFF'); empIds.forEach((id,i)=>span3(r,1+i*3, per[id].extraOt ? per[id].extraOt : 0, st(), RS)); r++;
+  label('Total Payable'); empIds.forEach((id,i)=>span3(r,1+i*3, per[id].payable, st({font:{bold:true}}), RS)); r++;
+  label('Paid (settled)'); empIds.forEach((id,i)=>span3(r,1+i*3, per[id].paid, st(), RS)); r++;
+  if(empIds.some(id=>per[id].nil)){ label('Written off (nil)'); empIds.forEach((id,i)=>span3(r,1+i*3, per[id].nil, st(), RS)); r++; }
+  label('Remains', 'D9A23A'); empIds.forEach((id,i)=>span3(r,1+i*3, per[id].remains, st({font:{bold:true}, fill:'FBF0D9'}), RS)); r++;
+  ws['!ref'] = X.utils.encode_range({s:{r:0,c:0},e:{r:r-1,c:cols-1}});
+  ws['!merges'] = merges;
+  ws['!cols'] = [{wch:22}, ...empIds.flatMap(()=>[{wch:6},{wch:9},{wch:9}])];
+  ws['!rows'] = [{hpt:26},{hpt:22}];
+  ws['!freeze'] = { xSplit:1, ySplit:3 };
+  return { ws, per };
+}
+
+async function exportXlsx(){
+  toast('Preparing Excel…');
+  try{ await loadXLSX(); }catch(e){ toast('Could not load Excel — check connection'); return; }
+  const X = window.XLSX;
+  const { from, to } = period();
+  const { lines } = computeLines(allEntries(), cfg);
+  const advances = allAdvances();
+  const sm0 = summarize(lines, advances, cfg, from, to);
+  const only = x => !S.person || x.emp===S.person;
+  const sm = { emps: sm0.emps.filter(only), lines: sm0.lines.filter(only), advances: sm0.advances.filter(only) };
+  // worker order: by first role (Karigar, Helper, Extra…), then name
+  const roleOrder = id => { const r=(empById(id).roles||[])[0]; const i=cfg.roles.findIndex(x=>x.id===r); return i<0?99:i; };
+  const ids = (S.person ? [S.person] : sm.emps.map(e=>e.emp)).sort((a,b)=> roleOrder(a)-roleOrder(b) || empById(a).name.localeCompare(empById(b).name));
+  const wb = X.utils.book_new();
+  const titleBase = 'BHAUTI REGISTER — ' + pretty(from).main + ' to ' + pretty(to).main;
+  const hasNight = sm.lines.some(l=>l.shift==='Night');
+  const dayIds = hasNight ? ids.filter(id=>sm.lines.some(l=>l.emp===id && l.shift==='Day') || !sm.lines.some(l=>l.emp===id)) : ids;
+  const reg = buildRegister(X, titleBase + (hasNight?' — Day Shift':''), hasNight?'Day':null, from, to, lines, advances, dayIds);
+  X.utils.book_append_sheet(wb, reg.ws, hasNight?'Register (Day)':'Register');
+  if(hasNight){
+    const nIds = ids.filter(id=>sm.lines.some(l=>l.emp===id && l.shift==='Night'));
+    X.utils.book_append_sheet(wb, buildRegister(X, titleBase+' — Night Shift', 'Night', from, to, lines, advances, nIds).ws, 'Register (Night)');
+  }
+  // Summary sheet
+  const H = { font:{bold:true,color:{rgb:'FFFFFF'}}, fill:{fgColor:{rgb:'1D5A52'}}, alignment:{horizontal:'center',wrapText:true} };
+  const sheet = (rows, widths, money) => { const ws = X.utils.aoa_to_sheet(rows); const rng = X.utils.decode_range(ws['!ref']); for(let c=0;c<=rng.e.c;c++){ const h=ws[X.utils.encode_cell({r:0,c})]; if(h) h.s=H; } if(money) for(let r=1;r<=rng.e.r;r++) for(const c of money){ const cell=ws[X.utils.encode_cell({r,c})]; if(cell && cell.t==='n') cell.z='"₹"#,##0'; } ws['!cols']=widths.map(w=>({wch:w})); ws['!freeze']={xSplit:0,ySplit:1}; return ws; };
+  const sumRows = [['ID','Name','Roles','Days','Duty','Special OT','Chalu OT','Extra OT (hrs)','Total OT','Pending before','Advance','Total Payable','Paid','Remains']];
+  for(const id of ids){
+    const s = sm.emps.find(e=>e.emp===id) || { days:0, basic:0, ot:0, byQ:{} };
+    const p = pendingBefore(id, from, lines, advances);
+    const adv = sm.advances.filter(a=>a.emp===id).reduce((t,a)=>t+(Number(a.amount)||0),0);
+    const Hs = hisabs.filter(h=>h.emp===id && h.date>=from && h.date<=to);
+    const paid = Hs.reduce((t,h)=>t+(Number(h.paid)||0),0), nil = Hs.filter(h=>h.action==='nil').reduce((t,h)=>t+(Number(h.balance)||0),0);
+    const myL = sm.lines.filter(l=>l.emp===id);
+    const spl = myL.filter(l=>l.quality==='Special'&&l.otMode==='ghori').reduce((t,l)=>t+l.ot,0), chl = myL.filter(l=>l.quality==='Chalu'&&l.otMode==='ghori').reduce((t,l)=>t+l.ot,0), ext = myL.filter(l=>l.otMode!=='ghori').reduce((t,l)=>t+l.ot,0);
+    const payable = p + Math.round(s.basic) + Math.round(s.ot) - adv;
+    sumRows.push([id, empById(id).name, (empById(id).roles||[]).map(r=>roleById(r).name).join(', '), s.days, Math.round(s.basic), spl, chl, ext, Math.round(s.ot), p, adv, payable, paid, payable-paid-nil]);
+  }
+  X.utils.book_append_sheet(wb, sheet(sumRows, [7,20,16,6,11,11,11,12,11,13,11,13,11,11], [4,5,6,7,8,9,10,11,12,13]), 'Summary');
+  const det = [['Date','Shift','Unit','Quality','ID','Name','Role','Group ghori','Basic ghori','OT ghori (after shortfall)','Shared by','OT ghori each','Shortfall cut','OT hours','Duty','OT','Total']]
+    .concat(sm.lines.slice().sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:0).map(l=>[l.date,l.shift,l.unit,l.quality,l.emp,empById(l.emp).name,roleById(l.role).name,l.groupGhori,l.basicGhori,l.otMode==='ghori'?l.otGhori:'',l.otMode==='ghori'?l.shareN:'',l.otMode==='ghori'&&l.otGhori?Math.round(l.otGhori/l.shareN*100)/100:'',l.kamiCut||'',l.otHours||'',l.basic,l.ot,l.total]));
+  X.utils.book_append_sheet(wb, sheet(det, [11,7,9,8,7,18,9,8,8,10,8,9,9,8,9,9,9], [14,15,16]), 'Daily breakdown');
+  const unitRows = [['Name','Unit','Days','Duty','OT','Total']];
+  for(const id of ids){ const s=sm.emps.find(e=>e.emp===id); if(!s) continue; for(const [u,v] of Object.entries(s.byUnit)){ const ot=sm.lines.filter(l=>l.emp===id&&l.unit===u).reduce((t,l)=>t+l.ot,0); unitRows.push([empById(id).name,u,v.days,v.total-ot,ot,v.total]); } }
+  X.utils.book_append_sheet(wb, sheet(unitRows, [20,10,6,11,11,11], [3,4,5]), 'By unit');
+  const adv = [['Date','ID','Name','Amount','Note']].concat(sm.advances.map(a=>[a.date,a.emp,empById(a.emp).name,Number(a.amount)||0,a.note||'']));
+  X.utils.book_append_sheet(wb, sheet(adv, [11,7,20,11,24], [3]), 'Advances');
+  const hs = [['Settled up to','ID','Name','Earned','Advance','Previous carry','Due','Paid','Balance','Action']].concat(hisabs.filter(h=>h.date>=from&&h.date<=to&&only(h)).map(h=>[h.date,h.emp,empById(h.emp).name,h.earned,h.adv,h.prev,h.due,h.paid,h.balance,h.action==='carry'?'Carry forward':'Nil']));
+  X.utils.book_append_sheet(wb, sheet(hs, [12,7,20,11,11,12,11,11,11,13], [3,4,5,6,7,8]), 'Settlements');
+  X.writeFile(wb, `Bhauti_${S.person?empById(S.person).name.replace(/\W+/g,'_')+'_':''}${from}_to_${to}.xlsx`);
+  toast('Excel downloaded ✓');
+}
+
+/* ---------- ADVANCE ---------- */
+function empOptions(sel){ return `<option value="">— Select employee —</option>` + cfg.employees.filter(e=>e.active!==false).sort((a,b)=>a.name.localeCompare(b.name)).map(e=>`<option value="${e.id}" ${e.id===sel?'selected':''}>${esc(e.name)} (${e.id})</option>`).join(''); }
+function renderAdvance(){
+  const m = months[ym(S.date)] || { advances:[] };
+  let list = (m.advances||[]).filter(a=>a.date===S.date);
+  if(me.type!=='owner') list = list.filter(a=>a.by===me.id);
+  $('view').innerHTML = `${dateBar()}
+    <div class="card"><div class="ctitle">Add advance</div>
+      <div class="field"><select id="advEmp">${empOptions(S.advEmp)}</select></div>
+      <div class="field"><input type="number" inputmode="decimal" id="advAmt" class="big-num" placeholder="₹ Amount"></div>
+      <div class="field"><input type="text" id="advNote" placeholder="Note (optional)"></div>
+      <button class="btn gold" onclick="saveAdvance()">Save advance</button></div>
+    <div class="sec">Advances for this day (${list.length})</div>
+    <div class="card" style="padding:4px 14px">${list.length ? list.map(a=>`<div class="list-row"><div class="main"><div class="t">${esc(empById(a.emp).name)}</div><div class="s">${esc(a.note||'')}</div></div><div class="amt bad">${fmt(a.amount)}</div>${can.delete()?`<button class="x" onclick="delAdvance('${a.id}')">✕</button>`:''}</div>`).join('') : '<div class="empty">No advances.</div>'}</div>`;
+}
+async function saveAdvance(){
+  const emp=$('advEmp').value, amt=Number($('advAmt').value), note=$('advNote').value.trim();
+  if(!emp){ toast('Select an employee'); return; } if(!(amt>0)){ toast('Enter an amount'); return; }
+  const mm=ym(S.date); const a={ id:uid(), date:S.date, emp, amount:amt, note, by:me.id, at:Date.now() };
+  const res = await mutate('m:'+mm, ()=>({entries:[],advances:[]}), d=>{ (d.advances=d.advances||[]).push(a); });
+  if(res){ months[mm]=res; await touchMonth(mm); S.advEmp=''; toast('Advance saved ✓'); }
+  render();
+}
+async function delAdvance(id){
+  if(!confirm('Delete this advance?')) return;
+  const mm=ym(S.date);
+  const res = await mutate('m:'+mm, ()=>({entries:[],advances:[]}), d=>{ d.advances=(d.advances||[]).filter(a=>a.id!==id); });
+  if(res){ months[mm]=res; toast('Deleted'); } render();
+}
+
+/* ---------- HISAB ---------- */
+function renderHisab(){
+  const { lines } = computeLines(allEntries(), cfg);
+  let calc = null;
+  if(S.hisEmp) calc = hisabFor(S.hisEmp, S.hisDate, lines, allAdvances(), hisabs, cfg);
+  const paid = Number(S.hisPaid)||0;
+  const bal = calc ? calc.due - paid : 0;
+  const recent = [...hisabs].filter(h=>!S.hisEmp || h.emp===S.hisEmp).sort((a,b)=> (b.at||0)-(a.at||0)).slice(0,15);
+  $('view').innerHTML = `
+    <div class="card"><div class="ctitle">Settle account</div>
+      <div class="field"><select onchange="S.hisEmp=this.value;S.hisPaid='';render()">${empOptions(S.hisEmp)}</select></div>
+      <div class="field"><div class="lbl">Up to date</div><input type="date" value="${S.hisDate}" max="${today()}" onchange="S.hisDate=this.value;render()"></div>
+      ${calc ? `
+        <table class="t">
+          <tr><td>Period</td><td class="n">${calc.from?short(calc.from):'Start'} – ${short(S.hisDate)}</td></tr>
+          <tr><td>Days worked</td><td class="n">${calc.days}</td></tr>
+          <tr><td>Duty amount</td><td class="n">${fmt(calc.duty)}</td></tr>
+          <tr><td>Overtime amount</td><td class="n">${fmt(calc.ot)}</td></tr>
+          <tr><td>Total earned</td><td class="n"><b>${fmt(calc.earned)}</b></td></tr>
+          <tr><td>Advance</td><td class="n bad">− ${fmt(calc.adv)}</td></tr>
+          <tr><td>Previous balance (carried)</td><td class="n">${calc.prev>=0?'+ ':''}${fmt(calc.prev)}</td></tr>
+          <tr><td><b>Amount due</b></td><td class="n"><b>${fmt(calc.due)}</b></td></tr>
+        </table>
+        <div class="field mt"><div class="lbl">Amount paid</div><input type="number" inputmode="decimal" class="big-num" value="${S.hisPaid}" placeholder="₹ 0" oninput="S.hisPaid=this.value;updBal(${calc.due})"></div>
+        <div id="balBox">${balHtml(bal)}</div>
+        <button class="btn mt" onclick="saveHisab()">Save settlement</button>
+        <button class="btn ghost mt" onclick="openPerson('${S.hisEmp}')">Open full dashboard of this person</button>` : '<div class="note">Select an employee — the period starts automatically from the day after their last settlement.</div>'}
+    </div>
+    ${calc ? hisabDetail(calc) : ''}
+    <div class="sec">${S.hisEmp?esc(empById(S.hisEmp).name)+" — past settlements":"Past settlements"}</div>
+    <div class="card" style="padding:4px 14px">${recent.length ? recent.map(h=>`<div class="list-row"><div class="main"><div class="t">${esc(empById(h.emp).name)}</div><div class="s">${short(h.date)} · Due ${fmt(h.due)} · Paid ${fmt(h.paid)}</div></div><div style="text-align:right"><div class="amt">${fmt(h.balance)}</div><div class="note">${h.action==='carry'?'Carry forward':'Nil'}</div></div>${can.delete()?`<button class="x" onclick="delHisab('${h.id}')">✕</button>`:''}</div>`).join('') : '<div class="empty">No settlements yet.</div>'}</div>`;
+}
+function hisabDetail(c){
+  const from = c.from || '2000-01-01';
+  const { lines } = computeLines(allEntries(), cfg);
+  const L = lines.filter(l=>l.emp===S.hisEmp && l.date>=from && l.date<=S.hisDate).sort((a,b)=>a.date<b.date?-1:1);
+  const A = allAdvances().filter(a=>a.emp===S.hisEmp && a.date>=from && a.date<=S.hisDate).sort((a,b)=>a.date<b.date?-1:1);
+  const byRole = {}; for(const l of L){ const r=byRole[l.role]||(byRole[l.role]={d:0,t:0,ot:0}); r.d++; r.t+=l.total; r.ot+=l.ot; }
+  const byQ = {}; for(const l of L){ const q=byQ[l.quality]||(byQ[l.quality]={days:0,duty:0,ot:0,otDays:0,share:0}); q.days++; q.duty+=l.basic; q.ot+=l.ot; if(l.otMode==='ghori'&&l.otGhori>0){ q.otDays++; q.share+=l.otGhori/l.shareN; } }
+  return `<div class="sec">${esc(empById(S.hisEmp).name)} — work in this settlement</div>
+    <div class="card">
+      ${Object.keys(byRole).length?`<div class="lbl">By role</div><table class="t">${Object.entries(byRole).map(([rid,v])=>`<tr><td><span class="tag" style="background:${roleById(rid).color}">${esc(roleById(rid).name)}</span></td><td class="n">${v.d} days</td><td class="n">Duty ${fmt(v.t-v.ot)}</td><td class="n">OT ${fmt(v.ot)}</td></tr>`).join('')}</table>`:''}
+      ${qualityTable(byQ)}
+      ${L.length?`<div class="lbl" style="margin-top:12px">Daily breakdown</div>${dailyTable(L)}`:'<div class="note">No bhauti work in this period.</div>'}
+      ${A.length?`<div class="lbl" style="margin-top:12px">Advances</div><table class="t">${A.map(a=>`<tr><td>${short(a.date)}</td><td>${esc(a.note||'')}</td><td class="n bad">${fmt(a.amount)}</td></tr>`).join('')}</table>`:''}
+    </div>`;
+}
+async function openPerson(id){ S.person=id; S.per='range'; S.from=(hisabFor(id,S.hisDate,computeLines(allEntries(),cfg).lines,allAdvances(),hisabs,cfg).from)||S.from; S.to=S.hisDate; await go('salary'); }
+async function settlePerson(id){ S.hisEmp=id; S.hisPaid=''; S.hisDate=today(); await go('hisab'); }
+function balHtml(bal){
+  if(Math.round(bal)===0) return `<div class="note">Fully settled ✓</div>`;
+  return `<div class="warn">Balance: <b>${fmt(bal)}</b> ${bal>0?'(owed to worker)':'(worker owes)'}
+    <div class="seg" style="margin-top:8px"><button class="${S.hisAction==='carry'?'on':''}" onclick="S.hisAction='carry';updBal()">Carry forward</button><button class="${S.hisAction==='nil'?'on':''}" onclick="S.hisAction='nil';updBal()">Mark nil</button></div></div>`;
+}
+let lastDue=0;
+function updBal(due){ if(due!==undefined) lastDue=due; $('balBox').innerHTML = balHtml(lastDue - (Number(S.hisPaid)||0)); }
+async function saveHisab(){
+  const { lines } = computeLines(allEntries(), cfg);
+  const c = hisabFor(S.hisEmp, S.hisDate, lines, allAdvances(), hisabs, cfg);
+  if(hisabs.some(h=>h.emp===S.hisEmp && h.date>=S.hisDate)){ toast('A settlement on or after this date already exists'); return; }
+  const paid = Number(S.hisPaid)||0; const bal = c.due - paid;
+  const h = { id:uid(), emp:S.hisEmp, date:S.hisDate, from:c.from, earned:c.earned, adv:c.adv, prev:c.prev, due:c.due, paid, balance:Math.round(bal), action: Math.round(bal)===0 ? 'nil' : S.hisAction, by:me.id, at:Date.now() };
+  const res = await mutate('hisab', ()=>({list:[]}), d=>{ (d.list=d.list||[]).push(h); });
+  if(res){ hisabs=res.list; S.hisPaid=''; S.hisEmp=''; toast('Settlement saved ✓'); }
+  render();
+}
+async function delHisab(id){
+  if(!confirm('Delete this settlement? Later carried balances may become wrong.')) return;
+  const res = await mutate('hisab', ()=>({list:[]}), d=>{ d.list=(d.list||[]).filter(h=>h.id!==id); });
+  if(res){ hisabs=res.list; toast('Deleted'); } render();
+}
+
+/* ---------- SETTINGS ---------- */
+function renderSettings(){
+  let body='';
+  if(S.setTab==='emps'){
+    const list=[...cfg.employees].sort((a,b)=>(b.active!==false)-(a.active!==false)||a.name.localeCompare(b.name));
+    body = `<button class="btn mt" style="margin:0 0 10px" onclick="editEmp()">+ New employee</button><div class="card" style="padding:4px 14px">${list.map(e=>`<div class="list-row tap" onclick="editEmp('${e.id}')" style="${e.active===false?'opacity:.45':''}"><div class="main"><div class="t">${esc(e.name)} <span class="note">${e.id}</span></div><div class="s">${(e.roles||[]).map(r=>`<span class="tag" style="background:${roleById(r).color}">${esc(roleById(r).name)}</span>`).join('')}${e.active===false?' Inactive':''}</div></div><span class="note">›</span></div>`).join('')}</div>`;
+  } else if(S.setTab==='roles'){
+    body = `<button class="btn mt" style="margin:0 0 10px" onclick="editRole()">+ New role</button><div class="card" style="padding:4px 14px">${cfg.roles.map(r=>{ const rt=rateFor(r,today()); return `<div class="list-row tap" onclick="editRole('${r.id}')"><div class="avatar" style="background:${r.color}">${esc(r.name.slice(0,1))}</div><div class="main"><div class="t">${esc(r.name)}</div><div class="s">${r.payType==='monthly'?'Monthly '+fmt(rt.monthly)+' · no OT':'Daily '+fmt(rt.daily)+' · '+r.basicHours+' hrs · OT '+({ghori:'by ghori',hours:'by hours ('+CUR+(Number(rt.hourly)||0).toLocaleString('en-IN')+'/hr)',none:'none'})[r.otMode]}${r.otMode==='hours'&&!rt.hourly?' · <b class="bad">set hourly rate</b>':''}</div></div><span class="note">›</span></div>`; }).join('')}</div>`;
+  } else if(S.setTab==='units'){
+    body = `<div class="card"><div class="ctitle">Basic ghori per Karigar</div><div class="row"><div><div class="lbl">Special</div><input type="number" id="tgS" value="${cfg.targets.Special}"></div><div><div class="lbl">Chalu</div><input type="number" id="tgC" value="${cfg.targets.Chalu}"></div></div><button class="btn mt" onclick="saveTargets()">Save</button></div>
+      <div class="card"><div class="ctitle">Units</div>${cfg.units.map((u,i)=>`<div class="list-row"><div class="main"><div class="t">${esc(u)}</div></div><button class="x" onclick="delUnit(${i})">✕</button></div>`).join('')}<div class="row mt"><input type="text" id="newUnit" placeholder="Unit name"><button class="btn" style="flex:0 0 90px" onclick="addUnit()">Add</button></div></div>`;
+  } else {
+    body = `<button class="btn mt" style="margin:0 0 10px" onclick="editUser()">+ New user (Supervisor / Accountant)</button><div class="card" style="padding:4px 14px">${cfg.users.map(u=>`<div class="list-row tap" onclick="editUser('${u.id}')"><div class="main"><div class="t">${esc(u.name)}${u.id===me.id?' (you)':''}</div><div class="s">${({owner:'Owner — full access',supervisor:'Supervisor — bhauti entry only',accountant:'Accountant — entry + advance'+(u.perms&&u.perms.salary?' + salary/hisab':'')})[u.type]}</div></div><span class="note">›</span></div>`).join('')}</div>
+      <button class="btn danger mt" onclick="signOutDevice()">Sign out of this phone</button>`;
+  }
+  $('view').innerHTML = `<div class="subtabs">${[['emps','Employees'],['roles','Roles & Rates'],['units','Units & Targets'],['users','Users']].map(([k,l])=>`<button class="${S.setTab===k?'on':''}" onclick="S.setTab='${k}';render()">${l}</button>`).join('')}</div>${body}`;
+}
+async function saveCfg(fn){
+  const res = await mutate('config', ()=>cfg, fn);
+  if(res){ cfg=res; me = cfg.users.find(u=>u.id===me.id) || me; toast('Saved ✓'); closeSheet(); render(); }
+  return !!res;
+}
+function editEmp(id){
+  const e = id ? cfg.employees.find(x=>x.id===id) : { name:'', roles:[], active:true };
+  openSheet(`<h2>${id?'Edit employee':'New employee'}</h2><p class="sub">${id?'ID: '+id:'ID will be generated automatically'}</p>
+    <div class="field"><div class="lbl">Name</div><input type="text" id="eName" value="${esc(e.name)}"></div>
+    <div class="lbl">Roles this person can do</div>
+    ${cfg.roles.map(r=>`<label class="chk"><input type="checkbox" class="eRole" value="${r.id}" ${(e.roles||[]).includes(r.id)?'checked':''}> <span class="tag" style="background:${r.color}">${esc(r.name)}</span></label>`).join('')}
+    ${id?`<label class="chk"><input type="checkbox" id="eActive" ${e.active!==false?'checked':''}> Active (currently working)</label>`:''}
+    <button class="btn mt" onclick="saveEmp('${id||''}')">Save</button><button class="btn ghost mt" onclick="closeSheet()">Cancel</button>`);
+}
+async function saveEmp(id){
+  const name=$('eName').value.trim(); const roles=[...document.querySelectorAll('.eRole:checked')].map(c=>c.value);
+  if(!name){ toast('Enter a name'); return; } if(!roles.length){ toast('Select at least one role'); return; }
+  const active = id ? $('eActive').checked : true;
+  await saveCfg(c=>{
+    if(id){ const e=c.employees.find(x=>x.id===id); e.name=name; e.roles=roles; if(e.active!==false && !active) e.to=today(); if(active){ delete e.to; } e.active=active; }
+    else { c.nextNo=c.nextNo||c.employees.length+1; c.employees.push({ id:'E'+String(c.nextNo++).padStart(3,'0'), name, roles, active:true, from:today() }); }
+  });
+}
+function editRole(id){
+  const r = id ? cfg.roles.find(x=>x.id===id) : { name:'', color:PALETTE[cfg.roles.length%PALETTE.length], payType:'daily', otMode:'hours', countsForBasic:false, basicHours:8, rates:[{from:'2020-01-01',daily:0,hourly:0,monthly:0}] };
+  const rt = rateFor(r, today());
+  openSheet(`<h2>${id?'Edit role':'New role'}</h2>
+    <div class="field"><div class="lbl">Name</div><input type="text" id="rName" value="${esc(r.name)}"></div>
+    <div class="field"><div class="lbl">Pay type</div><select id="rPay"><option value="daily" ${r.payType==='daily'?'selected':''}>Daily (per-day rate)</option><option value="monthly" ${r.payType==='monthly'?'selected':''}>Monthly (fixed salary)</option></select></div>
+    <div class="row field"><div><div class="lbl">Daily rate ₹</div><input type="number" id="rDaily" value="${rt.daily||''}"></div><div><div class="lbl">Monthly ₹</div><input type="number" id="rMonthly" value="${rt.monthly||''}"></div></div>
+    <div class="row field"><div><div class="lbl">Basic hours</div><input type="number" id="rHours" value="${r.basicHours||''}"></div><div><div class="lbl">Hourly OT ₹</div><input type="number" id="rHourly" value="${rt.hourly||''}"></div></div>
+    <div class="field"><div class="lbl">How overtime is paid</div><select id="rOt"><option value="ghori" ${r.otMode==='ghori'?'selected':''}>By ghori (Karigar/Helper formula)</option><option value="hours" ${r.otMode==='hours'?'selected':''}>By hours</option><option value="none" ${r.otMode==='none'?'selected':''}>No OT</option></select></div>
+    <label class="chk"><input type="checkbox" id="rBasic" ${r.countsForBasic?'checked':''}> Basic ghori is based on the count of this role (Karigar)</label>
+    ${id?`<div class="field mt"><div class="lbl">New rate applies from (past records stay unchanged)</div><input type="date" id="rFrom" value="${today()}"></div>`:''}
+    <button class="btn mt" onclick="saveRole('${id||''}')">Save</button><button class="btn ghost mt" onclick="closeSheet()">Cancel</button>`);
+}
+async function saveRole(id){
+  const name=$('rName').value.trim(); if(!name){ toast('Enter a name'); return; }
+  const rate = { daily:Number($('rDaily').value)||0, hourly:Number($('rHourly').value)||0, monthly:Number($('rMonthly').value)||0 };
+  const fields = { name, payType:$('rPay').value, otMode:$('rPay').value==='monthly'?'none':$('rOt').value, countsForBasic:$('rBasic').checked, basicHours:Number($('rHours').value)||0 };
+  await saveCfg(c=>{
+    if(id){
+      const r=c.roles.find(x=>x.id===id); Object.assign(r, fields);
+      const from=$('rFrom').value||today(); const cur=rateFor(r,from);
+      if(cur.daily!==rate.daily || cur.hourly!==rate.hourly || cur.monthly!==rate.monthly){ r.rates=(r.rates||[]).filter(x=>x.from!==from); r.rates.push({from, ...rate}); }
+    } else c.roles.push({ id:'r_'+uid(), color:PALETTE[c.roles.length%PALETTE.length], ...fields, rates:[{from:'2020-01-01', ...rate}] });
+  });
+}
+async function saveTargets(){ const s=Number($('tgS').value), ch=Number($('tgC').value); if(!(s>0&&ch>0)){ toast('Enter valid numbers'); return; } await saveCfg(c=>{ c.targets={Special:s,Chalu:ch}; }); }
+async function addUnit(){ const n=$('newUnit').value.trim(); if(!n) return; await saveCfg(c=>{ if(!c.units.includes(n)) c.units.push(n); }); }
+async function delUnit(i){ if(cfg.units.length<=1){ toast('At least one unit is required'); return; } if(!confirm('Remove this unit? Past entries stay as they are.')) return; await saveCfg(c=>{ c.units.splice(i,1); }); }
+function editUser(id){
+  const u = id ? cfg.users.find(x=>x.id===id) : { name:'', pin:'', type:'supervisor', perms:{} };
+  openSheet(`<h2>${id?'Edit user':'New user'}</h2>
+    <div class="field"><div class="lbl">Name</div><input type="text" id="uName" value="${esc(u.name)}"></div>
+    <div class="field"><div class="lbl">4-digit PIN</div><input type="text" id="uPin" maxlength="4" inputmode="numeric" value="${esc(u.pin)}" style="letter-spacing:6px;text-align:center"></div>
+    ${u.type==='owner'?'':`<div class="field"><div class="lbl">Role</div><select id="uType" onchange="$('uPermBox').style.display=this.value==='accountant'?'block':'none'"><option value="supervisor" ${u.type==='supervisor'?'selected':''}>Supervisor — bhauti entry only</option><option value="accountant" ${u.type==='accountant'?'selected':''}>Accountant — entry + advance</option></select></div>
+    <div id="uPermBox" style="display:${u.type==='accountant'?'block':'none'}"><label class="chk"><input type="checkbox" id="uSal" ${u.perms&&u.perms.salary?'checked':''}> Can also see salary, dashboard and settlements</label></div>`}
+    <button class="btn mt" onclick="saveUser('${id||''}')">Save</button>
+    ${id && u.type!=='owner'?`<button class="btn danger mt" onclick="delUser('${id}')">Remove user</button>`:''}
+    <button class="btn ghost mt" onclick="closeSheet()">Cancel</button>`);
+}
+async function saveUser(id){
+  const name=$('uName').value.trim(), pin=$('uPin').value.trim();
+  if(!name){ toast('Enter a name'); return; } if(!/^\d{4}$/.test(pin)){ toast('PIN must be 4 digits'); return; }
+  if(cfg.users.some(u=>u.pin===pin && u.id!==id)){ toast('That PIN is already in use'); return; }
+  const type = $('uType') ? $('uType').value : 'owner';
+  const perms = { salary: type==='accountant' && $('uSal') && $('uSal').checked };
+  await saveCfg(c=>{ if(id){ const u=c.users.find(x=>x.id===id); u.name=name; u.pin=pin; if(u.type!=='owner'){ u.type=type; u.perms=perms; } } else c.users.push({ id:'u'+uid(), name, pin, type, perms }); });
+}
+async function delUser(id){ if(!confirm('Remove this user?')) return; await saveCfg(c=>{ c.users=c.users.filter(u=>u.id!==id); }); }
+
+/* ---------- sheets ---------- */
+function openSheet(html){ $('sheetBody').innerHTML=html; $('sheetOverlay').classList.remove('hidden'); }
+function closeSheet(){ $('sheetOverlay').classList.add('hidden'); }
+
+/* ---------- PIN login ---------- */
+let pinBuf='';
+function buildKeypad(){ let h=''; for(let i=1;i<=9;i++) h+=`<button onclick="pinPress('${i}')">${i}</button>`; h+=`<button class="w" onclick="pinBuf='';dots()">Clear</button><button onclick="pinPress('0')">0</button><button class="w" onclick="pinBuf=pinBuf.slice(0,-1);dots()">⌫</button>`; $('keypad').innerHTML=h; }
+function dots(){ document.querySelectorAll('#pins .pin-dot').forEach((d,i)=>d.classList.toggle('f', i<pinBuf.length)); }
+function pinPress(d){ if(pinBuf.length>=4) return; pinBuf+=d; dots(); if(pinBuf.length===4) setTimeout(tryPin,120); }
+async function tryPin(){
+  const u = cfg.users.find(x=>x.pin===pinBuf); pinBuf=''; dots();
+  if(!u){ $('pinError').textContent='Wrong PIN'; return; }
+  $('pinError').textContent=''; me=u; $('pinTitle').textContent='Opening…';
+  await enterApp();
+  $('pinOverlay').classList.add('hidden');
+}
+function showPin(){ $('app').style.display='none'; $('tabs').style.display='none'; $('pinTitle').textContent='Enter your PIN'; buildKeypad(); pinBuf=''; dots(); $('pinOverlay').classList.remove('hidden'); }
+function lockApp(){ me=null; S.tab='entry'; S.sel={}; S.hours={}; S.ghori=''; S.note=''; S.hisEmp=''; S.hisPaid=''; closeSheet(); showPin(); }
+async function enterApp(){
+  S.tab='entry'; S.date=today();
+  await loadMonth(ym(S.date), true);
+  allLoaded=false;
+  if(can.salary()) loadAll().then(()=>{ if(S.tab==='salary'||S.tab==='hisab') render(); });
+  $('app').style.display='block'; render();
+}
+async function finishSetup(){
+  const name=$('setupName').value.trim(), pin=$('setupPin').value.trim();
+  if(!name){ toast('Enter a name'); return; } if(!/^\d{4}$/.test(pin)){ toast('PIN must be 4 digits'); return; }
+  cfg = defaultConfig({ id:'u'+uid(), name, pin, type:'owner', perms:{salary:true} }, $('setupSeed').checked);
+  if(!(await safeSet('config', cfg))) return;
+  $('setupOverlay').classList.add('hidden'); toast('Setup complete'); showPin();
+}
+async function afterKey(){
+  readFailed=false; cfg = await safeGet('config');
+  if(!cfg && readFailed){ showPass('retry',null,'Could not load data. Check the connection and try again.'); return; }
+  if(!cfg){ $('setupOverlay').classList.remove('hidden'); } else showPin();
+}
+
+/* ---------- passphrase + Firebase sign-in (same flow as Cash Book) ---------- */
+let passMode='unlock', passMeta=null;
+function showPass(mode, meta, msg){
+  passMode=mode; passMeta=meta; $('passError').textContent=msg||''; $('passInput').value=''; $('passInput2').value='';
+  if(mode==='create'){ $('passTitle').textContent='Create a Salary Book passphrase'; $('passSub').textContent='This locks all salary data so even Google cannot read it. Use a different passphrase from Cash Book so the Supervisor cannot open the cash book. If you forget it, the data cannot be recovered — write it down somewhere safe.'; $('passInput2').style.display='block'; $('passBtn').textContent='Create passphrase'; $('passInput').style.display='block'; }
+  else if(mode==='unlock'){ $('passTitle').textContent='Enter salary passphrase'; $('passSub').textContent='Needed once on each new phone.'; $('passInput2').style.display='none'; $('passInput').style.display='block'; $('passBtn').textContent='Unlock'; }
+  else { $('passTitle').textContent='Connection problem'; $('passSub').textContent=''; $('passInput').style.display='none'; $('passInput2').style.display='none'; $('passBtn').textContent='Try again'; }
+  $('passOverlay').classList.remove('hidden');
+}
+async function startApp(){
+  $('passOverlay').classList.add('hidden');
+  let meta=null;
+  try{ const s=await fb.F.getDoc(fb.F.doc(fb.db, COL, 'crypto')); if(s.exists()) meta=s.data(); }
+  catch(e){ console.error(e); showPass('retry',null,'Could not reach the server. If this is the first time, allow the "salary" collection in Firestore rules.'); return; }
+  const saved=await idbGet('key');
+  if(meta && saved && await verifyKey(saved, meta)){ cryptoKey=saved; await afterKey(); return; }
+  showPass(meta?'unlock':'create', meta);
+}
+async function doPass(){
+  if(passMode==='retry'){ startApp(); return; }
+  const p1=$('passInput').value, btn=$('passBtn'); $('passError').textContent='';
+  if(p1.length<8){ $('passError').textContent='Use at least 8 characters'; return; }
+  btn.disabled=true; const old=btn.textContent; btn.textContent='Working…';
+  try{
+    if(passMode==='create'){
+      if(p1!==$('passInput2').value){ $('passError').textContent='The two passphrases do not match'; return; }
+      const salt=crypto.getRandomValues(new Uint8Array(16)); const key=await deriveKey(p1,salt);
+      await fb.F.setDoc(fb.F.doc(fb.db, COL, 'crypto'), { salt:u8ToB64(salt), check: await encryptJSON({ok:'salary'},key), updatedAt:Date.now() });
+      cryptoKey=key; await idbSet('key',key);
+    } else {
+      const key=await deriveKey(p1, b64ToU8(passMeta.salt));
+      if(!(await verifyKey(key,passMeta))){ $('passError').textContent='Wrong passphrase'; return; }
+      cryptoKey=key; await idbSet('key',key);
+    }
+    $('passOverlay').classList.add('hidden'); await afterKey();
+  }catch(e){ console.error(e); $('passError').textContent='Something went wrong — check connection and try again'; }
+  finally{ btn.disabled=false; btn.textContent=old; }
+}
+async function doAuthLogin(){
+  const email=$('authEmail').value.trim(), pass=$('authPass').value, btn=$('authBtn'); $('authError').textContent='';
+  if(!email||!pass){ $('authError').textContent='Enter email and password'; return; }
+  btn.disabled=true; btn.textContent='Signing in…';
+  try{ await fb.A.signInWithEmailAndPassword(fb.auth, email, pass); $('authPass').value=''; }
+  catch(e){ $('authError').textContent = (e && /invalid-credential|wrong-password|user-not-found/.test(e.code||'')) ? 'Wrong email or password' : 'Could not sign in — check connection'; }
+  btn.disabled=false; btn.textContent='Sign in';
+}
+async function signOutDevice(){ cryptoKey=null; await idbDel('key'); if(!DEMO) try{ await fb.A.signOut(fb.auth); }catch(e){} location.reload(); }
+
+let started=false;
+function init(){
+  if(DEMO){
+    $('demoBar').innerHTML='<div class="demo-bar">DEMO MODE — for preview only, nothing is saved</div>';
+    cfg = defaultConfig({ id:'u_owner', name:'Aman', pin:'1111', type:'owner', perms:{salary:true} }, true);
+    cfg.users.push({ id:'u_sup', name:'Supervisor', pin:'2222', type:'supervisor', perms:{} });
+    memStore.config = cfg;
+    const d = today(), y = addDays(d,-1);
+    const k = cfg.employees.filter(e=>e.roles.includes('r_k')).slice(0,3).map(e=>e.id);
+    const h = cfg.employees.filter(e=>e.roles.includes('r_h') && !e.roles.includes('r_k')).slice(0,2).map(e=>e.id);
+    const ex = cfg.employees.find(e=>e.name==='Virendra LKO').id;
+    cfg.roles[2].rates[0].hourly = 62.5;
+    const mk = (date, unit, quality, ghori, extra) => ({ id:uid(), date, shift:'Day', unit, quality, ghori, adjust:true, by:'u_owner', at:Date.now(), people:[...k.map(id=>({emp:id,role:'r_k'})), ...h.map(id=>({emp:id,role:'r_h'})), ...(extra?[{emp:ex,role:'r_e',otHours:2}]:[])] });
+    const ents = [mk(addDays(d,-2),'Unit 2','Chalu',31,false), mk(y,'Unit 1','Special',25,true), mk(d,'Unit 1','Special',15,false)];
+    const months2 = {}; for(const e of ents){ (months2[ym(e.date)] = months2[ym(e.date)] || {entries:[],advances:[]}).entries.push(e); }
+    months2[ym(d)] = months2[ym(d)] || {entries:[],advances:[]};
+    months2[ym(d)].advances.push({ id:uid(), date:d, emp:k[0], amount:500, note:'Household', by:'u_owner', at:Date.now() });
+    for(const [m,v] of Object.entries(months2)) memStore['m:'+m]=v;
+    memStore.meta = { months: Object.keys(months2).sort() };
+    showPin(); return;
+  }
+  fb.A.onAuthStateChanged(fb.auth, user=>{
+    if(user){ $('authOverlay').classList.add('hidden'); if(!started){ started=true; startApp(); } }
+    else { started=false; me=null; cryptoKey=null; ['passOverlay','pinOverlay','setupOverlay'].forEach(i=>$(i).classList.add('hidden')); $('app').style.display='none'; $('tabs').style.display='none'; $('authOverlay').classList.remove('hidden'); }
+  });
+}
+Object.assign(window, { S, go, applyFilter, openPerson, settlePerson, render, shiftDate, setDate, toggleEmp, saveEntry, delEntry, showEntry, checkShort, refreshAll, jumpEntry, showWorker, exportXlsx,
+  saveAdvance, delAdvance, saveHisab, delHisab, updBal, editEmp, saveEmp, editRole, saveRole, saveTargets, addUnit, delUnit, editUser, saveUser, delUser,
+  openSheet, closeSheet, pinPress, dots, lockApp, finishSetup, doPass, doAuthLogin, signOutDevice, $,
+  get pinBuf(){ return pinBuf; }, set pinBuf(v){ pinBuf=v; } });
+init();
+if('serviceWorker' in navigator && !DEMO){ window.addEventListener('load', ()=>navigator.serviceWorker.register('sw.js').catch(()=>{})); }
+</script>
+</body>
+</html>
