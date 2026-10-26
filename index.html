@@ -47,7 +47,9 @@
   .datebar button{ width:40px; height:40px; border-radius:12px; border:none; background:var(--paper); font-size:20px; color:var(--ink); cursor:pointer; }
   .datebar .dl{ font-family:'Fraunces',serif; font-weight:600; font-size:17px; text-align:center; flex:1; position:relative; }
   .datebar .dl small{ display:block; font:400 11.5px 'Inter'; color:var(--ink-soft); }
-  .datebar input[type=date]{ position:absolute; inset:0; opacity:0; width:100%; cursor:pointer; }
+  .datebar .dl{ cursor:pointer; }
+  .datebar .calic{ font-size:15px; }
+  .datebar input[type=date]{ position:absolute; inset:0; opacity:0; width:100%; height:100%; cursor:pointer; -webkit-appearance:none; }
 
   .card{ background:var(--card); border:1px solid var(--rule); border-radius:16px; padding:14px; box-shadow:0 2px 10px var(--shadow); margin-bottom:12px; }
   .ctitle{ font-family:'Fraunces',serif; font-weight:600; font-size:15px; margin:0 0 10px; display:flex; align-items:center; justify-content:space-between; gap:8px; }
@@ -73,6 +75,7 @@
   .chip.on::before{ content:'✓ '; }
   .search{ position:sticky; top:8px; z-index:5; margin-bottom:12px; }
   .search input{ border-radius:14px; box-shadow:0 4px 14px var(--shadow); padding:13px 14px; }
+  .noot{ margin-top:12px; padding:10px 12px; border:1px dashed #e3b9b9; border-radius:12px; background:#fdf5f5; }
   .hrs{ display:flex; align-items:center; justify-content:space-between; gap:10px; padding:8px 0; border-top:1px dashed var(--rule); font-size:14px; }
   .hrs input{ width:90px; text-align:center; padding:7px; }
 
@@ -240,7 +243,10 @@ function computeLines(entries, cfg){
       const rate = rateFor(role, e.date);
       const basic = role.payType === 'monthly' ? 0 : (Number(rate.daily)||0);
       let ot = 0, otGhoriUsed = 0, cut = 0;
-      if(role.otMode === 'ghori' && K > 0 && target > 0){
+      const noOt = !!(e.noOt || p.noOt);
+      if(noOt){
+        if(role.otMode === 'ghori' && K > 0 && target > 0 && otG < 0 && e.adjust) pending[p.emp] = (pending[p.emp] || 0) + (-otG);
+      } else if(role.otMode === 'ghori' && K > 0 && target > 0){
         if(otG >= 0){
           const pend = pending[p.emp] || 0;
           otGhoriUsed = Math.max(0, otG - pend);
@@ -256,7 +262,7 @@ function computeLines(entries, cfg){
       const totalAmt = Math.round(basic + ot);
       lines.push({ entryId:e.id, date:e.date, unit:e.unit, shift:e.shift, quality:e.quality, emp:p.emp, role:p.role,
         basic, ot: totalAmt - basic, total: totalAmt, otGhori: otGhoriUsed, groupOtGhori: Math.max(0, otG), shareN: roleCount[p.role], otMode: role.otMode, kamiCut: cut, otHours: Number(p.otHours)||0,
-        groupGhori: total, basicGhori: basicG, short: otG < 0 ? -otG : 0 });
+        groupGhori: total, basicGhori: basicG, short: otG < 0 ? -otG : 0, noOt, noOtReason: noOt ? (e.noOtReason||'') : '' });
     }
   }
   return { lines, pending };
@@ -384,8 +390,11 @@ const can = {
   salary: () => me && (me.type==='owner' || (me.perms && me.perms.salary)),
   advance: () => me && (me.type==='owner' || me.type==='accountant'),
   hisab: () => me && (me.type==='owner' || (me.type==='accountant' && me.perms && me.perms.salary)),
-  settings: () => me && me.type==='owner',
-  delete: () => me && me.type==='owner'
+  settings: () => me && (me.type==='owner' || (me.perms && me.perms.addEmp)),
+  owner: () => me && me.type==='owner',
+  addEmp: () => me && (me.type==='owner' || (me.perms && me.perms.addEmp)),
+  edit: () => me && (me.type==='owner' || (me.perms && me.perms.editEntries)),
+  delete: () => me && (me.type==='owner' || (me.perms && me.perms.editEntries))
 };
 const roleById = id => cfg.roles.find(r=>r.id===id) || { name:'?', color:'#999' };
 const empById = id => cfg.employees.find(e=>e.id===id) || { name:'(hata diya)', id };
@@ -450,7 +459,7 @@ function renderTabs(){
   if(can.salary()) t.push(['salary','Salary']);
   if(can.advance()) t.push(['advance','Advance']);
   if(can.hisab()) t.push(['hisab','Settle']);
-  if(can.settings()) t.push(['settings','Settings']);
+  if(can.settings()) t.push(['settings', can.owner()?'Settings':'Employees']);
   $('tabs').style.display = t.length > 1 ? 'flex' : 'none';
   $('tabsIn').innerHTML = t.map(([k,l])=>`<button class="${S.tab===k?'on':''}" onclick="go('${k}')">${ICON[k]}${l}</button>`).join('');
 }
@@ -463,8 +472,10 @@ function render(){
 }
 function dateBar(){
   const p = pretty(S.date);
-  return `<div class="datebar"><button onclick="shiftDate(-1)">‹</button><div class="dl">${p.main}<small>${p.sub}${S.date===today()?' · Today':''}</small><input type="date" value="${S.date}" max="${today()}" onchange="setDate(this.value)"></div><button onclick="shiftDate(1)">›</button></div>`;
+  if(S.editId) return `<div class="datebar"><div class="dl">${p.main}<small>${p.sub} · editing</small></div></div>`;
+  return `<div class="datebar"><button onclick="shiftDate(-1)">‹</button><div class="dl" onclick="openCal()">${p.main} <span class="calic">📅</span><small>${p.sub}${S.date===today()?' · Today':''} · tap to change</small><input type="date" id="dateCal" value="${S.date}" max="${today()}" onchange="setDate(this.value)"></div><button onclick="shiftDate(1)">›</button></div>`;
 }
+function openCal(){ const i=$('dateCal'); if(!i) return; try{ i.showPicker(); }catch(e){ i.focus(); i.click(); } }
 async function shiftDate(n){ const d=addDays(S.date,n); if(d>today()) return; S.date=d; await loadMonth(ym(S.date)); render(); }
 async function setDate(v){ if(!v) return; S.date=v; await loadMonth(ym(S.date)); render(); }
 
@@ -487,9 +498,16 @@ function renderEntry(){
       ${hrsRows ? `<div style="margin-top:10px">${hrsRows}</div>`:''}</div>`;
   }).join('');
   const m = months[ym(S.date)] || { entries:[] };
-  const todays = (m.entries||[]).filter(e=>e.date===S.date).sort((a,b)=>(a.at||0)-(b.at||0));
-  const mine = me.type==='owner' ? todays : todays.filter(e=>e.by===me.id);
+  const mine = (m.entries||[]).filter(e=>e.date===S.date).sort((a,b)=>(a.at||0)-(b.at||0));
+  const selPeople = dailyRoles.flatMap(r=>[...(S.sel[r.id]||[])].map(id=>({id, r})));
+  S.noOtSet = S.noOtSet || new Set();
+  const noOtHtml = selPeople.length ? `<div class="noot">
+      <label class="chk"><input type="checkbox" ${S.noOtAll?'checked':''} onchange="S.noOtAll=this.checked;render()"> <b>No overtime for this whole group</b></label>
+      ${S.noOtAll ? '' : `<div class="note" style="margin:4px 0 6px">Or tap people who should NOT get OT:</div><div class="chips">${selPeople.map(({id,r})=>`<div class="chip ${S.noOtSet.has(id)?'on':''}" style="--rc:#a13d3d" onclick="toggleNoOt('${id}')">${esc(empById(id).name)}</div>`).join('')}</div>`}
+      ${(S.noOtAll || S.noOtSet.size) ? `<input type="text" style="margin-top:8px" value="${esc(S.noOtReason||'')}" placeholder="Reason (e.g. jalan zyada)" oninput="S.noOtReason=this.value">` : ''}
+    </div>` : '';
   $('view').innerHTML = `
+    ${S.editId ? `<div class="warn" style="margin:0 0 12px"><b>Editing an entry.</b> Make changes below and tap Update.<button class="btn ghost mt" style="padding:9px 0" onclick="cancelEdit()">Cancel edit</button></div>` : ''}
     ${dateBar()}
     <div class="card">
       <div class="row" style="margin-bottom:10px">
@@ -505,11 +523,12 @@ function renderEntry(){
       <div class="lbl">Total ghori (whole group)</div>
       <input type="number" inputmode="numeric" class="big-num" id="ghoriIn" value="${S.ghori}" placeholder="0" oninput="S.ghori=this.value;checkShort()">
       <div id="shortBox">${short?shortHtml(basicG-g):''}</div>
+      ${noOtHtml}
       <div class="lbl" style="margin-top:12px">Note (optional)</div>
       <input type="text" value="${esc(S.note)}" placeholder="Anything to note" oninput="S.note=this.value">
-      <button class="btn mt" id="saveBtn" onclick="saveEntry()">Save entry</button>
+      <button class="btn mt" id="saveBtn" onclick="saveEntry()">${S.editId?'Update entry':'Save entry'}</button>
     </div>
-    <div class="sec">${me.type==='owner'?'Entries for this day':'Your entries for this day'} (${mine.length})</div>
+    <div class="sec">Entries for this day (${mine.length})${can.edit()?' — tap to edit':''}</div>
     <div class="card" style="padding:4px 14px">${mine.length ? mine.map(e=>entryRow(e)).join('') : '<div class="empty">No entries yet.</div>'}</div>`;
   applyFilter();
 }
@@ -528,37 +547,76 @@ function entryRow(e){
   const counts = {}; for(const p of e.people) counts[p.role]=(counts[p.role]||0)+1;
   const tags = Object.entries(counts).map(([rid,n])=>{ const r=roleById(rid); return `<span class="tag" style="background:${r.color}">${esc(r.name)} ${n}</span>`; }).join('');
   const by = (cfg.users.find(u=>u.id===e.by)||{}).name || '';
-  return `<div class="list-row ${me.type==='owner'?'tap':''}" ${me.type==='owner'?`onclick="showEntry('${e.id}')"`:''}><div class="main"><div class="t">${esc(e.unit)} · ${e.shift} · ${e.quality}</div><div class="s">${tags} ${e.ghori?'· '+e.ghori+' ghori':''} ${by?'· '+esc(by):''}</div></div>${can.delete()?`<button class="x" onclick="event.stopPropagation();delEntry('${e.id}')">✕</button>`:''}</div>`;
+  const noOt = e.noOt ? '<span class="tag" style="background:#a13d3d">No OT</span>' : (e.people.some(p=>p.noOt) ? '<span class="tag" style="background:#a13d3d">No OT: '+e.people.filter(p=>p.noOt).length+'</span>' : '');
+  const edited = e.editedBy ? ' · edited by '+esc((cfg.users.find(u=>u.id===e.editedBy)||{}).name||'') : '';
+  return `<div class="list-row tap" style="${S.editId===e.id?'background:var(--gold-tint)':''}" onclick="showEntry('${e.id}')"><div class="main"><div class="t">${esc(e.unit)} · ${e.shift} · ${e.quality}</div><div class="s">${tags}${noOt} ${e.ghori?'· '+e.ghori+' ghori':''} ${by?'· '+esc(by):''}${edited}</div></div>${can.delete()?`<button class="x" onclick="event.stopPropagation();delEntry('${e.id}')">✕</button>`:''}</div>`;
 }
 function toggleEmp(rid, eid){ const s = S.sel[rid] || (S.sel[rid]=new Set()); s.has(eid)?s.delete(eid):s.add(eid); render(); }
 async function saveEntry(){
   const people = [];
-  for(const r of cfg.roles) for(const id of (S.sel[r.id]||[])) people.push({ emp:id, role:r.id, otHours: r.otMode==='hours' ? (Number(S.hours[r.id+':'+id])||0) : 0 });
+  const nos = S.noOtSet || new Set();
+  for(const r of cfg.roles) for(const id of (S.sel[r.id]||[])){ const pp = { emp:id, role:r.id, otHours: r.otMode==='hours' ? (Number(S.hours[r.id+':'+id])||0) : 0 }; if(!S.noOtAll && nos.has(id)) pp.noOt = true; people.push(pp); }
   if(!people.length){ toast('Tick at least one name'); return; }
   const needsGhori = people.some(p=>roleById(p.role).otMode==='ghori');
   if(needsGhori && (S.ghori==='' || Number(S.ghori)<0)){ toast('Enter total ghori'); return; }
   const ids = people.map(p=>p.emp);
   if(new Set(ids).size !== ids.length){ toast('Same person ticked in two roles — remove one'); return; }
   const m = months[ym(S.date)] || { entries:[] };
-  const clash = (m.entries||[]).filter(e=>e.date===S.date).flatMap(e=>e.people.map(p=>p.emp)).filter(id=>ids.includes(id));
+  const clash = (m.entries||[]).filter(e=>e.date===S.date && e.id!==S.editId).flatMap(e=>e.people.map(p=>p.emp)).filter(id=>ids.includes(id));
   if(clash.length && !confirm('These people are already in an entry today:\n' + [...new Set(clash)].map(id=>empById(id).name).join(', ') + '\n\nSave anyway?')) return;
   const K = people.filter(p=>roleById(p.role).countsForBasic).length;
   const basicG = K * (Number(cfg.targets[S.quality])||0);
-  const entry = { id:uid(), date:S.date, shift:S.shift, unit:S.unit, quality:S.quality, ghori: needsGhori?Number(S.ghori):0, people, note:S.note.trim(), adjust: Number(S.ghori) < basicG ? !!S.adjust : false, by:me.id, at:Date.now() };
+  const anyNoOt = S.noOtAll || people.some(p=>p.noOt);
+  const entry = { id:S.editId||uid(), date:S.date, shift:S.shift, unit:S.unit, quality:S.quality, ghori: needsGhori?Number(S.ghori):0, people, note:S.note.trim(), adjust: Number(S.ghori) < basicG ? !!S.adjust : false, by:me.id, at:Date.now() };
+  if(S.noOtAll) entry.noOt = true;
+  if(anyNoOt && (S.noOtReason||'').trim()) entry.noOtReason = S.noOtReason.trim();
+  const editing = S.editId;
   $('saveBtn').disabled = true; $('saveBtn').textContent = 'Saving…';
   const mm = ym(S.date);
-  const res = await mutate('m:'+mm, ()=>({entries:[],advances:[]}), d=>{ (d.entries=d.entries||[]).push(entry); });
-  if(res){ months[mm] = res; await touchMonth(mm); S.sel={}; S.hours={}; S.ghori=''; S.note=''; S.adjust=true; S.q=''; toast('Entry saved ✓'); }
+  let missing = false;
+  const res = await mutate('m:'+mm, ()=>({entries:[],advances:[]}), d=>{
+    d.entries = d.entries||[];
+    if(editing){
+      const i = d.entries.findIndex(x=>x.id===editing);
+      if(i<0){ missing = true; return; }
+      const old = d.entries[i];
+      d.entries[i] = { ...entry, by: old.by, at: old.at, editedBy: me.id, editedAt: Date.now() };
+    } else d.entries.push(entry);
+  });
+  if(missing){ toast('This entry was deleted by someone else'); clearForm(); render(); return; }
+  if(res){ months[mm] = res; await touchMonth(mm); clearForm(); toast(editing ? 'Entry updated ✓' : 'Entry saved ✓'); allLoaded=false; if(can.salary()) loadAll(); }
   render();
 }
+function clearForm(){ S.sel={}; S.hours={}; S.ghori=''; S.note=''; S.adjust=true; S.q=''; S.noOtAll=false; S.noOtSet=new Set(); S.noOtReason=''; S.editId=null; }
+function toggleNoOt(id){ S.noOtSet = S.noOtSet || new Set(); S.noOtSet.has(id) ? S.noOtSet.delete(id) : S.noOtSet.add(id); render(); }
+function startEdit(id){
+  const m = months[ym(S.date)] || { entries:[] };
+  const e = (m.entries||[]).find(x=>x.id===id); if(!e) return;
+  clearForm();
+  S.editId = id; S.unit = e.unit; S.shift = e.shift; S.quality = e.quality; S.ghori = e.ghori ? String(e.ghori) : ''; S.note = e.note||''; S.adjust = e.adjust!==false;
+  for(const p of e.people){ (S.sel[p.role] = S.sel[p.role] || new Set()).add(p.emp); if(p.otHours) S.hours[p.role+':'+p.emp] = String(p.otHours); if(p.noOt) S.noOtSet.add(p.emp); }
+  S.noOtAll = !!e.noOt; S.noOtReason = e.noOtReason||'';
+  closeSheet(); S.tab='entry'; render(); window.scrollTo(0,0);
+}
+function cancelEdit(){ clearForm(); render(); }
 async function delEntry(id){
   if(!confirm('Delete this entry?')) return;
   const mm = ym(S.date);
   const res = await mutate('m:'+mm, ()=>({entries:[],advances:[]}), d=>{ d.entries=(d.entries||[]).filter(e=>e.id!==id); });
-  if(res){ months[mm]=res; toast('Deleted'); closeSheet(); }
+  if(res){ months[mm]=res; toast('Deleted'); closeSheet(); if(S.editId===id) clearForm(); allLoaded=false; if(can.salary()) loadAll(); }
   render();
 }
+function showEntryPlain(e){
+  const byRole = {}; for(const p of e.people) (byRole[p.role]=byRole[p.role]||[]).push(p);
+  const by = (cfg.users.find(u=>u.id===e.by)||{}).name || '';
+  openSheet(`<h2>${esc(e.unit)} · ${e.shift} · ${e.quality}</h2><p class="sub">${pretty(e.date).main} · ${e.ghori} ghori${by?' · entered by '+esc(by):''}${e.note?' · '+esc(e.note):''}</p>
+    ${e.noOt?`<div class="warn" style="margin:0 0 10px">No overtime for this group${e.noOtReason?' — '+esc(e.noOtReason):''}</div>`:''}
+    ${Object.entries(byRole).map(([rid,ps])=>`<div class="lbl" style="margin-top:8px">${esc(roleById(rid).name)} (${ps.length})</div><div class="chips">${ps.map(p=>`<div class="chip">${esc(empById(p.emp).name)}${p.otHours?' · '+p.otHours+' hrs':''}${p.noOt?' · no OT':''}</div>`).join('')}</div>`).join('')}
+    ${can.edit()?`<button class="btn mt" onclick="startEdit('${e.id}')">Edit this entry</button><button class="btn danger mt" onclick="delEntry('${e.id}')">Delete entry</button>`:''}
+    <button class="btn ghost mt" onclick="closeSheet()">Close</button>`);
+}
 async function showEntry(id){
+  if(!can.salary()){ const m = months[ym(S.date)] || { entries:[] }; const e = (m.entries||[]).find(x=>x.id===id); if(e) showEntryPlain(e); return; }
   if(!allLoaded) await loadAll();
   const { lines } = computeLines(allEntries(), cfg);
   const e = allEntries().find(x=>x.id===id); if(!e) return;
@@ -568,7 +626,8 @@ async function showEntry(id){
   openSheet(`<h2>${esc(e.unit)} · ${e.shift} · ${e.quality}</h2><p class="sub">${pretty(e.date).main} · ${e.ghori} ghori · Basic ${basicG} ghori · OT ${Math.max(0,e.ghori-basicG)} ghori${e.note?' · '+esc(e.note):''}</p>
     <table class="t"><tr><th>Name</th><th>Role</th><th class="n">Duty</th><th class="n">OT</th><th class="n">Total</th></tr>
     ${L.map(l=>`<tr><td>${esc(empById(l.emp).name)}${otNote(l)?`<div class="note">${otNote(l)}</div>`:''}${l.kamiCut?`<div class="note">shortfall ${num(l.kamiCut)} ghori deducted</div>`:''}</td><td>${esc(roleById(l.role).name)}</td><td class="n">${fmt(l.basic)}</td><td class="n">${fmt(l.ot)}</td><td class="n"><b>${fmt(l.total)}</b></td></tr>`).join('')}</table>
-    <button class="btn danger mt" onclick="delEntry('${id}')">Delete entry</button><button class="btn ghost mt" onclick="closeSheet()">Close</button>`);
+    ${e.noOt?`<div class="warn">No overtime for this group${e.noOtReason?' — '+esc(e.noOtReason):''}</div>`:''}
+    ${can.edit()?`<button class="btn mt" onclick="startEdit('${id}')">Edit this entry</button><button class="btn danger mt" onclick="delEntry('${id}')">Delete entry</button>`:''}<button class="btn ghost mt" onclick="closeSheet()">Close</button>`);
 }
 
 /* ---------- SALARY / DASHBOARD ---------- */
@@ -622,6 +681,7 @@ async function refreshAll(){ await loadAll(); toast('Refreshed'); render(); }
 async function jumpEntry(d){ S.date=d; await loadMonth(ym(d)); go('entry'); }
 const num = n => (Math.round(n*100)/100).toString();
 function otNote(l){
+  if(l.noOt) return 'No OT'+(l.noOtReason?' ('+esc(l.noOtReason)+')':'');
   if(l.otMode==='ghori' && l.otGhori>0) return `OT ${num(l.otGhori)} ghori ÷ ${l.shareN} ${esc(roleById(l.role).name)} = ${num(l.otGhori/l.shareN)} each`;
   if(l.otHours) return `OT ${l.otHours} hrs`;
   return '';
@@ -630,7 +690,7 @@ function lineNote(l){
   const bits=[esc(l.unit), l.quality];
   const o=otNote(l); if(o) bits.push(o);
   if(l.kamiCut) bits.push('shortfall −'+num(l.kamiCut)+' ghori');
-  if(l.short) bits.push(l.short+' ghori short — no OT');
+  if(l.short && !l.noOt) bits.push(l.short+' ghori short — no OT');
   return bits.join(' · ');
 }
 function qualityTable(byQ){
@@ -720,7 +780,7 @@ function buildRegister(X, title, shift, from, to, lines, advances, empIds){
       const multi = (empById(id).roles||[]).length > 1;
       const att = ls.length ? (multi ? ls.map(l=>roleById(l.role).name.slice(0,1)).join('+') : ls.length) : '';
       put(r,c, att);
-      const fr = q => ls.filter(l=>l.quality===q).map(l=> l.otMode!=='ghori' ? (l.otHours? l.otHours+' hrs OT':'') :  (l.otGhori>0 ? num(l.otGhori)+'/'+l.shareN : '') + (l.kamiCut?' (−'+num(l.kamiCut)+')':'') + (l.short?(l.otGhori>0||l.kamiCut?' ':'')+'short '+l.short:'')).filter(Boolean).join(', ');
+      const fr = q => ls.filter(l=>l.quality===q).map(l=> l.noOt ? 'no OT' : l.otMode!=='ghori' ? (l.otHours? l.otHours+' hrs OT':'') :  (l.otGhori>0 ? num(l.otGhori)+'/'+l.shareN : '') + (l.kamiCut?' (−'+num(l.kamiCut)+')':'') + (l.short?(l.otGhori>0||l.kamiCut?' ':'')+'short '+l.short:'')).filter(Boolean).join(', ');
       put(r,c+1, fr('Special'), st({fill: ls.some(l=>l.quality==='Special')?'FBF0D9':undefined}));
       put(r,c+2, fr('Chalu'), st({fill: ls.some(l=>l.quality==='Chalu')?'E3EFEB':undefined}));
     });
@@ -810,9 +870,9 @@ async function exportXlsx(){
     sumRows.push([id, empById(id).name, (empById(id).roles||[]).map(r=>roleById(r).name).join(', '), s.days, Math.round(s.basic), spl, chl, ext, Math.round(s.ot), p, adv, payable, paid, payable-paid-nil]);
   }
   X.utils.book_append_sheet(wb, sheet(sumRows, [7,20,16,6,11,11,11,12,11,13,11,13,11,11], [4,5,6,7,8,9,10,11,12,13]), 'Summary');
-  const det = [['Date','Shift','Unit','Quality','ID','Name','Role','Group ghori','Basic ghori','OT ghori (after shortfall)','Shared by','OT ghori each','Shortfall cut','OT hours','Duty','OT','Total']]
-    .concat(sm.lines.slice().sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:0).map(l=>[l.date,l.shift,l.unit,l.quality,l.emp,empById(l.emp).name,roleById(l.role).name,l.groupGhori,l.basicGhori,l.otMode==='ghori'?l.otGhori:'',l.otMode==='ghori'?l.shareN:'',l.otMode==='ghori'&&l.otGhori?Math.round(l.otGhori/l.shareN*100)/100:'',l.kamiCut||'',l.otHours||'',l.basic,l.ot,l.total]));
-  X.utils.book_append_sheet(wb, sheet(det, [11,7,9,8,7,18,9,8,8,10,8,9,9,8,9,9,9], [14,15,16]), 'Daily breakdown');
+  const det = [['Date','Shift','Unit','Quality','ID','Name','Role','Group ghori','Basic ghori','OT ghori (after shortfall)','Shared by','OT ghori each','Shortfall cut','OT hours','No OT reason','Duty','OT','Total']]
+    .concat(sm.lines.slice().sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:0).map(l=>[l.date,l.shift,l.unit,l.quality,l.emp,empById(l.emp).name,roleById(l.role).name,l.groupGhori,l.basicGhori,l.otMode==='ghori'?l.otGhori:'',l.otMode==='ghori'?l.shareN:'',l.otMode==='ghori'&&l.otGhori?Math.round(l.otGhori/l.shareN*100)/100:'',l.kamiCut||'',l.otHours||'',l.noOt?('No OT'+(l.noOtReason?' — '+l.noOtReason:'')):'',l.basic,l.ot,l.total]));
+  X.utils.book_append_sheet(wb, sheet(det, [11,7,9,8,7,18,9,8,8,10,8,9,9,8,18,9,9,9], [15,16,17]), 'Daily breakdown');
   const unitRows = [['Name','Unit','Days','Duty','OT','Total']];
   for(const id of ids){ const s=sm.emps.find(e=>e.emp===id); if(!s) continue; for(const [u,v] of Object.entries(s.byUnit)){ const ot=sm.lines.filter(l=>l.emp===id&&l.unit===u).reduce((t,l)=>t+l.ot,0); unitRows.push([empById(id).name,u,v.days,v.total-ot,ot,v.total]); } }
   X.utils.book_append_sheet(wb, sheet(unitRows, [20,10,6,11,11,11], [3,4,5]), 'By unit');
@@ -828,23 +888,24 @@ async function exportXlsx(){
 function empOptions(sel){ return `<option value="">— Select employee —</option>` + cfg.employees.filter(e=>e.active!==false).sort((a,b)=>a.name.localeCompare(b.name)).map(e=>`<option value="${e.id}" ${e.id===sel?'selected':''}>${esc(e.name)} (${e.id})</option>`).join(''); }
 function renderAdvance(){
   const m = months[ym(S.date)] || { advances:[] };
-  let list = (m.advances||[]).filter(a=>a.date===S.date);
-  if(me.type!=='owner') list = list.filter(a=>a.by===me.id);
+  const list = (m.advances||[]).filter(a=>a.date===S.date).sort((a,b)=>(a.at||0)-(b.at||0));
+  const advTotal = list.reduce((t,a)=>t+(Number(a.amount)||0),0);
   $('view').innerHTML = `${dateBar()}
     <div class="card"><div class="ctitle">Add advance</div>
-      <div class="field"><select id="advEmp">${empOptions(S.advEmp)}</select></div>
-      <div class="field"><input type="number" inputmode="decimal" id="advAmt" class="big-num" placeholder="₹ Amount"></div>
-      <div class="field"><input type="text" id="advNote" placeholder="Note (optional)"></div>
+      <div class="field"><select id="advEmp" onchange="S.advEmp=this.value">${empOptions(S.advEmp)}</select></div>
+      <div class="field"><input type="number" inputmode="decimal" id="advAmt" class="big-num" placeholder="₹ Amount" value="${S.advAmt||''}" oninput="S.advAmt=this.value"></div>
+      <div class="field"><input type="text" id="advNote" placeholder="Note (optional)" value="${esc(S.advNote||'')}" oninput="S.advNote=this.value"></div>
       <button class="btn gold" onclick="saveAdvance()">Save advance</button></div>
+    <div class="kpis" style="margin-top:12px"><div class="kpi hero"><div class="k">Total advance given — ${pretty(S.date).main}</div><div class="v">${fmt(advTotal)}</div><div class="note" style="color:#fff;opacity:.8">${list.length} ${list.length===1?'entry':'entries'} · match this with the cash given</div></div></div>
     <div class="sec">Advances for this day (${list.length})</div>
-    <div class="card" style="padding:4px 14px">${list.length ? list.map(a=>`<div class="list-row"><div class="main"><div class="t">${esc(empById(a.emp).name)}</div><div class="s">${esc(a.note||'')}</div></div><div class="amt bad">${fmt(a.amount)}</div>${can.delete()?`<button class="x" onclick="delAdvance('${a.id}')">✕</button>`:''}</div>`).join('') : '<div class="empty">No advances.</div>'}</div>`;
+    <div class="card" style="padding:4px 14px">${list.length ? list.map(a=>`<div class="list-row"><div class="main"><div class="t">${esc(empById(a.emp).name)}</div><div class="s">${esc(a.note||'')}${a.by?' · by '+esc((cfg.users.find(u=>u.id===a.by)||{}).name||''):''}</div></div><div class="amt bad">${fmt(a.amount)}</div>${can.delete()?`<button class="x" onclick="delAdvance('${a.id}')">✕</button>`:''}</div>`).join('') : '<div class="empty">No advances.</div>'}</div>`;
 }
 async function saveAdvance(){
   const emp=$('advEmp').value, amt=Number($('advAmt').value), note=$('advNote').value.trim();
   if(!emp){ toast('Select an employee'); return; } if(!(amt>0)){ toast('Enter an amount'); return; }
   const mm=ym(S.date); const a={ id:uid(), date:S.date, emp, amount:amt, note, by:me.id, at:Date.now() };
   const res = await mutate('m:'+mm, ()=>({entries:[],advances:[]}), d=>{ (d.advances=d.advances||[]).push(a); });
-  if(res){ months[mm]=res; await touchMonth(mm); S.advEmp=''; toast('Advance saved ✓'); }
+  if(res){ months[mm]=res; await touchMonth(mm); S.advEmp=''; S.advAmt=''; S.advNote=''; toast('Advance saved ✓ — '+pretty(S.date).main); }
   render();
 }
 async function delAdvance(id){
@@ -929,19 +990,21 @@ async function delHisab(id){
 /* ---------- SETTINGS ---------- */
 function renderSettings(){
   let body='';
+  if(!can.owner()) S.setTab='emps';
   if(S.setTab==='emps'){
     const list=[...cfg.employees].sort((a,b)=>(b.active!==false)-(a.active!==false)||a.name.localeCompare(b.name));
-    body = `<button class="btn mt" style="margin:0 0 10px" onclick="editEmp()">+ New employee</button><div class="card" style="padding:4px 14px">${list.map(e=>`<div class="list-row tap" onclick="editEmp('${e.id}')" style="${e.active===false?'opacity:.45':''}"><div class="main"><div class="t">${esc(e.name)} <span class="note">${e.id}</span></div><div class="s">${(e.roles||[]).map(r=>`<span class="tag" style="background:${roleById(r).color}">${esc(roleById(r).name)}</span>`).join('')}${e.active===false?' Inactive':''}</div></div><span class="note">›</span></div>`).join('')}</div>`;
+    body = `<button class="btn mt" style="margin:0 0 10px" onclick="editEmp()">+ New employee</button><div class="card" style="padding:4px 14px">${list.map(e=>`<div class="list-row ${can.owner()?'tap':''}" ${can.owner()?`onclick="editEmp('${e.id}')"`:''} style="${e.active===false?'opacity:.45':''}"><div class="main"><div class="t">${esc(e.name)} <span class="note">${e.id}</span></div><div class="s">${(e.roles||[]).map(r=>`<span class="tag" style="background:${roleById(r).color}">${esc(roleById(r).name)}</span>`).join('')}${e.active===false?' Inactive':''}</div></div><span class="note">›</span></div>`).join('')}</div>`;
   } else if(S.setTab==='roles'){
     body = `<button class="btn mt" style="margin:0 0 10px" onclick="editRole()">+ New role</button><div class="card" style="padding:4px 14px">${cfg.roles.map(r=>{ const rt=rateFor(r,today()); return `<div class="list-row tap" onclick="editRole('${r.id}')"><div class="avatar" style="background:${r.color}">${esc(r.name.slice(0,1))}</div><div class="main"><div class="t">${esc(r.name)}</div><div class="s">${r.payType==='monthly'?'Monthly '+fmt(rt.monthly)+' · no OT':'Daily '+fmt(rt.daily)+' · '+r.basicHours+' hrs · OT '+({ghori:'by ghori',hours:'by hours ('+CUR+(Number(rt.hourly)||0).toLocaleString('en-IN')+'/hr)',none:'none'})[r.otMode]}${r.otMode==='hours'&&!rt.hourly?' · <b class="bad">set hourly rate</b>':''}</div></div><span class="note">›</span></div>`; }).join('')}</div>`;
   } else if(S.setTab==='units'){
     body = `<div class="card"><div class="ctitle">Basic ghori per Karigar</div><div class="row"><div><div class="lbl">Special</div><input type="number" id="tgS" value="${cfg.targets.Special}"></div><div><div class="lbl">Chalu</div><input type="number" id="tgC" value="${cfg.targets.Chalu}"></div></div><button class="btn mt" onclick="saveTargets()">Save</button></div>
       <div class="card"><div class="ctitle">Units</div>${cfg.units.map((u,i)=>`<div class="list-row"><div class="main"><div class="t">${esc(u)}</div></div><button class="x" onclick="delUnit(${i})">✕</button></div>`).join('')}<div class="row mt"><input type="text" id="newUnit" placeholder="Unit name"><button class="btn" style="flex:0 0 90px" onclick="addUnit()">Add</button></div></div>`;
   } else {
-    body = `<button class="btn mt" style="margin:0 0 10px" onclick="editUser()">+ New user (Supervisor / Accountant)</button><div class="card" style="padding:4px 14px">${cfg.users.map(u=>`<div class="list-row tap" onclick="editUser('${u.id}')"><div class="main"><div class="t">${esc(u.name)}${u.id===me.id?' (you)':''}</div><div class="s">${({owner:'Owner — full access',supervisor:'Supervisor — bhauti entry only',accountant:'Accountant — entry + advance'+(u.perms&&u.perms.salary?' + salary/hisab':'')})[u.type]}</div></div><span class="note">›</span></div>`).join('')}</div>
+    body = `<button class="btn mt" style="margin:0 0 10px" onclick="editUser()">+ New user (Supervisor / Accountant)</button><div class="card" style="padding:4px 14px">${cfg.users.map(u=>`<div class="list-row tap" onclick="editUser('${u.id}')"><div class="main"><div class="t">${esc(u.name)}${u.id===me.id?' (you)':''}</div><div class="s">${({owner:'Owner — full access',supervisor:'Supervisor — bhauti entry only',accountant:'Accountant — entry + advance'+(u.perms&&u.perms.salary?' + salary/hisab':'')})[u.type]}${u.perms&&u.perms.editEntries?' · can edit':''}${u.perms&&u.perms.addEmp?' · can add employees':''}</div></div><span class="note">›</span></div>`).join('')}</div>
       <button class="btn danger mt" onclick="signOutDevice()">Sign out of this phone</button>`;
   }
-  $('view').innerHTML = `<div class="subtabs">${[['emps','Employees'],['roles','Roles & Rates'],['units','Units & Targets'],['users','Users']].map(([k,l])=>`<button class="${S.setTab===k?'on':''}" onclick="S.setTab='${k}';render()">${l}</button>`).join('')}</div>${body}`;
+  const subs = can.owner() ? [['emps','Employees'],['roles','Roles & Rates'],['units','Units & Targets'],['users','Users']] : [['emps','Employees']];
+  $('view').innerHTML = `<div class="subtabs">${subs.map(([k,l])=>`<button class="${S.setTab===k?'on':''}" onclick="S.setTab='${k}';render()">${l}</button>`).join('')}</div>${body}`;
 }
 async function saveCfg(fn){
   const res = await mutate('config', ()=>cfg, fn);
@@ -958,6 +1021,7 @@ function editEmp(id){
     <button class="btn mt" onclick="saveEmp('${id||''}')">Save</button><button class="btn ghost mt" onclick="closeSheet()">Cancel</button>`);
 }
 async function saveEmp(id){
+  if(id && !can.owner()){ toast('Only the owner can change an employee'); return; }
   const name=$('eName').value.trim(); const roles=[...document.querySelectorAll('.eRole:checked')].map(c=>c.value);
   if(!name){ toast('Enter a name'); return; } if(!roles.length){ toast('Select at least one role'); return; }
   const active = id ? $('eActive').checked : true;
@@ -1000,7 +1064,10 @@ function editUser(id){
     <div class="field"><div class="lbl">Name</div><input type="text" id="uName" value="${esc(u.name)}"></div>
     <div class="field"><div class="lbl">4-digit PIN</div><input type="text" id="uPin" maxlength="4" inputmode="numeric" value="${esc(u.pin)}" style="letter-spacing:6px;text-align:center"></div>
     ${u.type==='owner'?'':`<div class="field"><div class="lbl">Role</div><select id="uType" onchange="$('uPermBox').style.display=this.value==='accountant'?'block':'none'"><option value="supervisor" ${u.type==='supervisor'?'selected':''}>Supervisor — bhauti entry only</option><option value="accountant" ${u.type==='accountant'?'selected':''}>Accountant — entry + advance</option></select></div>
-    <div id="uPermBox" style="display:${u.type==='accountant'?'block':'none'}"><label class="chk"><input type="checkbox" id="uSal" ${u.perms&&u.perms.salary?'checked':''}> Can also see salary, dashboard and settlements</label></div>`}
+    <div id="uPermBox" style="display:${u.type==='accountant'?'block':'none'}"><label class="chk"><input type="checkbox" id="uSal" ${u.perms&&u.perms.salary?'checked':''}> Can also see salary, dashboard and settlements</label></div>
+    <div class="lbl" style="margin-top:10px">Extra permissions</div>
+    <label class="chk"><input type="checkbox" id="uEdit" ${u.perms&&u.perms.editEntries?'checked':''}> Can edit / delete wrong entries and advances</label>
+    <label class="chk"><input type="checkbox" id="uAddEmp" ${u.perms&&u.perms.addEmp?'checked':''}> Can add new employees</label>`}
     <button class="btn mt" onclick="saveUser('${id||''}')">Save</button>
     ${id && u.type!=='owner'?`<button class="btn danger mt" onclick="delUser('${id}')">Remove user</button>`:''}
     <button class="btn ghost mt" onclick="closeSheet()">Cancel</button>`);
@@ -1010,7 +1077,7 @@ async function saveUser(id){
   if(!name){ toast('Enter a name'); return; } if(!/^\d{4}$/.test(pin)){ toast('PIN must be 4 digits'); return; }
   if(cfg.users.some(u=>u.pin===pin && u.id!==id)){ toast('That PIN is already in use'); return; }
   const type = $('uType') ? $('uType').value : 'owner';
-  const perms = { salary: type==='accountant' && $('uSal') && $('uSal').checked };
+  const perms = { salary: type==='accountant' && $('uSal') && $('uSal').checked, editEntries: !!($('uEdit') && $('uEdit').checked), addEmp: !!($('uAddEmp') && $('uAddEmp').checked) };
   await saveCfg(c=>{ if(id){ const u=c.users.find(x=>x.id===id); u.name=name; u.pin=pin; if(u.type!=='owner'){ u.type=type; u.perms=perms; } } else c.users.push({ id:'u'+uid(), name, pin, type, perms }); });
 }
 async function delUser(id){ if(!confirm('Remove this user?')) return; await saveCfg(c=>{ c.users=c.users.filter(u=>u.id!==id); }); }
@@ -1021,24 +1088,34 @@ function closeSheet(){ $('sheetOverlay').classList.add('hidden'); }
 
 /* ---------- PIN login ---------- */
 let pinBuf='';
-function buildKeypad(){ let h=''; for(let i=1;i<=9;i++) h+=`<button onclick="pinPress('${i}')">${i}</button>`; h+=`<button class="w" onclick="pinBuf='';dots()">Clear</button><button onclick="pinPress('0')">0</button><button class="w" onclick="pinBuf=pinBuf.slice(0,-1);dots()">⌫</button>`; $('keypad').innerHTML=h; }
+function buildKeypad(){ let h=''; for(let i=1;i<=9;i++) h+=`<button onclick="pinPress('${i}')">${i}</button>`; h+=`<button class="w" onclick="pinClear()">Clear</button><button onclick="pinPress('0')">0</button><button class="w" onclick="pinBack()">⌫</button>`; $('keypad').innerHTML=h; }
 function dots(){ document.querySelectorAll('#pins .pin-dot').forEach((d,i)=>d.classList.toggle('f', i<pinBuf.length)); }
-function pinPress(d){ if(pinBuf.length>=4) return; pinBuf+=d; dots(); if(pinBuf.length===4) setTimeout(tryPin,120); }
+function pinClear(){ pinBuf=''; dots(); }
+function pinBack(){ pinBuf=pinBuf.slice(0,-1); dots(); }
+let pinBusy=false;
+function pinPress(d){ if(pinBusy || pinBuf.length>=4) return; pinBuf+=d; dots(); if(pinBuf.length===4) setTimeout(tryPin,120); }
 async function tryPin(){
-  const u = cfg.users.find(x=>x.pin===pinBuf); pinBuf=''; dots();
+  const u = cfg && cfg.users.find(x=>x.pin===pinBuf); pinBuf=''; dots();
   if(!u){ $('pinError').textContent='Wrong PIN'; return; }
-  $('pinError').textContent=''; me=u; $('pinTitle').textContent='Opening…';
-  await enterApp();
-  $('pinOverlay').classList.add('hidden');
+  $('pinError').textContent=''; me=u; pinBusy=true; $('pinTitle').textContent='Opening…';
+  try{
+    await enterApp();
+    $('pinOverlay').classList.add('hidden');
+  }catch(e){
+    console.error(e);
+    me=null; $('pinTitle').textContent='Enter your PIN';
+    $('pinError').textContent='Could not open: ' + (e && e.message ? e.message : e) + ' — send this message to Claude';
+  }finally{ pinBusy=false; }
 }
 function showPin(){ $('app').style.display='none'; $('tabs').style.display='none'; $('pinTitle').textContent='Enter your PIN'; buildKeypad(); pinBuf=''; dots(); $('pinOverlay').classList.remove('hidden'); }
-function lockApp(){ me=null; S.tab='entry'; S.sel={}; S.hours={}; S.ghori=''; S.note=''; S.hisEmp=''; S.hisPaid=''; closeSheet(); showPin(); }
+function lockApp(){ me=null; S.tab='entry'; clearForm(); S.hisEmp=''; S.hisPaid=''; closeSheet(); showPin(); }
 async function enterApp(){
-  S.tab='entry'; S.date=today();
-  await loadMonth(ym(S.date), true);
-  allLoaded=false;
-  if(can.salary()) loadAll().then(()=>{ if(S.tab==='salary'||S.tab==='hisab') render(); });
+  S.tab='entry'; S.date=today(); allLoaded=false;
+  if(!months[ym(S.date)]) months[ym(S.date)] = { entries:[], advances:[] };
   $('app').style.display='block'; render();
+  // fetch this month's data in the background, then refresh the screen
+  loadMonth(ym(S.date), true).then(()=>{ if(me && S.tab==='entry') render(); }).catch(e=>console.error(e));
+  if(can.salary()) loadAll().then(()=>{ if(me && (S.tab==='salary'||S.tab==='hisab')) render(); }).catch(e=>console.error(e));
 }
 async function finishSetup(){
   const name=$('setupName').value.trim(), pin=$('setupPin').value.trim();
@@ -1107,6 +1184,7 @@ function init(){
     $('demoBar').innerHTML='<div class="demo-bar">DEMO MODE — for preview only, nothing is saved</div>';
     cfg = defaultConfig({ id:'u_owner', name:'Aman', pin:'1111', type:'owner', perms:{salary:true} }, true);
     cfg.users.push({ id:'u_sup', name:'Supervisor', pin:'2222', type:'supervisor', perms:{} });
+    cfg.users.push({ id:'u_acc', name:'Accountant', pin:'3333', type:'accountant', perms:{ editEntries:true, addEmp:true } });
     memStore.config = cfg;
     const d = today(), y = addDays(d,-1);
     const k = cfg.employees.filter(e=>e.roles.includes('r_k')).slice(0,3).map(e=>e.id);
@@ -1127,10 +1205,10 @@ function init(){
     else { started=false; me=null; cryptoKey=null; ['passOverlay','pinOverlay','setupOverlay'].forEach(i=>$(i).classList.add('hidden')); $('app').style.display='none'; $('tabs').style.display='none'; $('authOverlay').classList.remove('hidden'); }
   });
 }
-Object.assign(window, { S, go, applyFilter, openPerson, settlePerson, render, shiftDate, setDate, toggleEmp, saveEntry, delEntry, showEntry, checkShort, refreshAll, jumpEntry, showWorker, exportXlsx,
+Object.assign(window, { S, go, applyFilter, openCal, toggleNoOt, startEdit, cancelEdit, openPerson, settlePerson, render, shiftDate, setDate, toggleEmp, saveEntry, delEntry, showEntry, checkShort, refreshAll, jumpEntry, showWorker, exportXlsx,
   saveAdvance, delAdvance, saveHisab, delHisab, updBal, editEmp, saveEmp, editRole, saveRole, saveTargets, addUnit, delUnit, editUser, saveUser, delUser,
   openSheet, closeSheet, pinPress, dots, lockApp, finishSetup, doPass, doAuthLogin, signOutDevice, $,
-  get pinBuf(){ return pinBuf; }, set pinBuf(v){ pinBuf=v; } });
+  pinClear, pinBack });
 init();
 if('serviceWorker' in navigator && !DEMO){ window.addEventListener('load', ()=>navigator.serviceWorker.register('sw.js').catch(()=>{})); }
 </script>
