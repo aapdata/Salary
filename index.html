@@ -75,6 +75,22 @@
   .chip.on::before{ content:'✓ '; }
   .search{ position:sticky; top:8px; z-index:5; margin-bottom:12px; }
   .search input{ border-radius:14px; box-shadow:0 4px 14px var(--shadow); padding:13px 14px; }
+  .payrow{ border-top:1px solid var(--rule); padding:10px 0; }
+  .payrow:first-child{ border-top:none; }
+  .payrow.off{ opacity:.45; }
+  .payrow .pin{ display:flex; gap:8px; margin-top:6px; }
+  .payrow .pin input{ padding:8px 10px; font-size:15px; }
+  .pill{ display:inline-block; font:600 11px 'Inter'; border-radius:10px; padding:2px 8px; }
+  .pill.ok{ background:#e3efeb; color:var(--good); } .pill.no{ background:#f7e6e6; color:var(--bad); }
+  .act{ display:flex; gap:6px; flex-wrap:wrap; margin-top:6px; }
+  .act a, .act button{ flex:1; min-width:90px; text-align:center; text-decoration:none; border:1px solid var(--rule); background:#fff; color:var(--ink); border-radius:10px; padding:8px 6px; font:600 12.5px 'Inter'; cursor:pointer; }
+  .act a.wa{ border-color:#25d366; color:#128c4a; }
+  #printArea{ display:none; }
+  .voucher{ border:1.5px solid #333; border-radius:6px; padding:14px 16px; margin:0 0 14px; font:13px 'Inter',sans-serif; color:#111; background:#fff; page-break-inside:avoid; }
+  .voucher h3{ margin:0; font:700 16px 'Inter'; } .voucher .vh{ display:flex; justify-content:space-between; border-bottom:1px solid #999; padding-bottom:6px; margin-bottom:8px; }
+  .voucher table{ width:100%; border-collapse:collapse; } .voucher td{ padding:3px 2px; } .voucher td.n{ text-align:right; font-family:'IBM Plex Mono',monospace; }
+  .voucher .tot td{ border-top:1px solid #333; font-weight:700; } .voucher .sig{ display:flex; justify-content:space-between; margin-top:28px; font-size:12px; }
+  @media print{ body > *:not(#printArea){ display:none !important; } #printArea{ display:block !important; } body{ background:#fff !important; } .voucher{ break-inside:avoid; } }
   .noot{ margin-top:12px; padding:10px 12px; border:1px dashed #e3b9b9; border-radius:12px; background:#fdf5f5; }
   .hrs{ display:flex; align-items:center; justify-content:space-between; gap:10px; padding:8px 0; border-top:1px dashed var(--rule); font-size:14px; }
   .hrs input{ width:90px; text-align:center; padding:7px; }
@@ -193,6 +209,7 @@
 
 <div class="overlay hidden" id="sheetOverlay" onclick="if(event.target===this)closeSheet()"><div class="sheet" id="sheetBody"></div></div>
 <div class="toast" id="toast"></div>
+<div id="printArea"></div>
 
 <script type="module">
 const DEMO = /[?&]demo\b/.test(location.search);
@@ -311,20 +328,30 @@ function summarize(lines, advances, cfg, from, to){
   return { emps, units, roles, tot, lines: L, advances: A };
 }
 // Hisab for one employee up to a date.
-function hisabFor(empId, upto, lines, advances, hisabs, cfg){
-  const past = hisabs.filter(h => h.emp===empId && h.date < upto).sort((a,b)=> a.date < b.date ? -1 : 1);
+function hisabFor(empId, workUpto, advUpto, lines, advances, hisabs, cfg){
+  advUpto = advUpto && advUpto > workUpto ? advUpto : workUpto;
+  const past = hisabs.filter(h => h.emp===empId && h.date < workUpto).sort((a,b)=> a.date < b.date ? -1 : 1);
   const last = past[past.length-1];
   const from = last ? addDays(last.date, 1) : '2000-01-01';
+  const advFrom = last ? addDays(last.advUpto && last.advUpto > last.date ? last.advUpto : last.date, 1) : '2000-01-01';
   const emp = cfg.employees.find(e => e.id===empId) || {};
-  const myLines = lines.filter(l => l.emp===empId && l.date >= from && l.date <= upto);
+  const myLines = lines.filter(l => l.emp===empId && l.date >= from && l.date <= workUpto);
   const earnedDaily = myLines.reduce((s,l)=>s+l.total, 0);
-  const firstDate = myLines.length ? myLines[0].date : upto;
-  const monthly = monthlyAccrual(cfg, emp, last ? from : (emp.from || firstDate), upto);
-  const adv = advances.filter(a => a.emp===empId && a.date >= from && a.date <= upto).reduce((s,a)=>s+(Number(a.amount)||0), 0);
+  const firstDate = myLines.length ? myLines[0].date : workUpto;
+  const monthly = monthlyAccrual(cfg, emp, last ? from : (emp.from || firstDate), workUpto);
+  const advList = advances.filter(a => a.emp===empId && a.date >= advFrom && a.date <= advUpto);
+  const adv = advList.reduce((s,a)=>s+(Number(a.amount)||0), 0);
   const prev = last && last.action==='carry' ? Number(last.balance)||0 : 0;
   const earned = earnedDaily + monthly;
   const ot = myLines.reduce((s,l)=>s+l.ot, 0);
-  return { from: last ? from : null, last, days: myLines.length, earned, duty: earned - ot, ot, adv, prev, due: earned - adv + prev };
+  return { from: last ? from : (myLines.length ? myLines[0].date : null), advFrom: last ? advFrom : null, workUpto, advUpto, last, days: myLines.length, earned, duty: earned - ot, ot, adv, prev, due: Math.round(earned - adv + prev) };
+}
+/* Advances taken after the duty cut-off but deducted in that settlement are booked on the settlement date (keeps registers balanced). */
+function effAdvances(advances, hisabs){
+  return advances.map(a=>{
+    const s = hisabs.find(h=>h.emp===a.emp && h.advUpto && a.date > h.date && a.date <= h.advUpto);
+    return s ? { ...a, origDate:a.date, date:s.date } : a;
+  });
 }
 /* ================= ENGINE-END ================= */
 
@@ -382,7 +409,7 @@ async function mutate(key, empty, fn){
 
 /* ---------- state ---------- */
 let cfg=null, me=null, months={}, hisabs=[], allLoaded=false;
-const S = { tab:'entry', date: today(), shift:'Day', unit:null, quality:'Special', sel:{}, hours:{}, ghori:'', note:'', adjust:true,
+const S = { payMode:'one', pay:null, payDone:null, hisAdvDate: today(), hisBank:'', hisCash:'', tab:'entry', date: today(), shift:'Day', unit:null, quality:'Special', sel:{}, hours:{}, ghori:'', note:'', adjust:true,
   per:'month', person:'', month: today().slice(0,7), from: today().slice(0,8)+'01', to: today(), sub:'workers',
   advEmp:'', hisEmp:'', hisDate: today(), hisPaid:'', hisAction:'carry', setTab:'emps' };
 
@@ -400,17 +427,35 @@ const roleById = id => cfg.roles.find(r=>r.id===id) || { name:'?', color:'#999' 
 const empById = id => cfg.employees.find(e=>e.id===id) || { name:'(hata diya)', id };
 const ym = iso => iso.slice(0,7);
 
+const loaded = new Set();      // months read successfully from the server
+let loadError = '';
 async function loadMonth(m, force){
-  if(months[m] && !force) return months[m];
-  const d = (await safeGet('m:'+m)) || { entries:[], advances:[] };
-  months[m] = d; return d;
+  if(loaded.has(m) && !force) return months[m];
+  let d;
+  try{ d = await rawGet('m:'+m); }
+  catch(e){ console.error(e); loadError = 'Could not load data — check internet and tap Retry'; if(!months[m]) months[m] = { entries:[], advances:[] }; throw e; }
+  months[m] = d || { entries:[], advances:[] }; loaded.add(m); return months[m];
 }
 async function loadAll(){
-  const meta = (await safeGet('meta')) || { months:[] };
-  const list = meta.months || [];
-  await Promise.all(list.map(m => loadMonth(m, true)));
-  hisabs = ((await safeGet('hisab')) || { list:[] }).list;
-  allLoaded = true;
+  try{
+    const meta = (await rawGet('meta')) || { months:[] };
+    const list = meta.months || [];
+    await Promise.all(list.map(m => loadMonth(m, true)));
+    hisabs = ((await rawGet('hisab')) || { list:[] }).list;
+    allLoaded = true; loadError = '';
+  }catch(e){ console.error(e); allLoaded = false; loadError = 'Could not load all data — check internet and tap Retry'; throw e; }
+}
+async function retryLoad(){
+  loadError = ''; readFailed = false;
+  $('view').innerHTML = '<div class="empty">Loading…</div>';
+  try{ await loadMonth(ym(S.date), true); if(can.salary()) await loadAll(); toast('Loaded ✓'); }catch(e){}
+  render();
+}
+function loadBanner(){
+  const m = ym(S.date);
+  if(loadError) return `<div class="warn" style="margin:0 0 12px;border-color:#e3b9b9;background:#fdf5f5"><b class="bad">${esc(loadError)}</b><button class="btn ghost mt" style="padding:9px 0" onclick="retryLoad()">Retry</button></div>`;
+  if(!loaded.has(m)) return `<div class="note" style="text-align:center;margin:-4px 0 10px">Loading entries…</div>`;
+  return '';
 }
 async function touchMonth(m){
   const meta = (await safeGet('meta')) || { months:[] };
@@ -463,7 +508,7 @@ function renderTabs(){
   $('tabs').style.display = t.length > 1 ? 'flex' : 'none';
   $('tabsIn').innerHTML = t.map(([k,l])=>`<button class="${S.tab===k?'on':''}" onclick="go('${k}')">${ICON[k]}${l}</button>`).join('');
 }
-async function go(tab){ S.tab = tab; if((tab==='salary'||tab==='hisab') && !allLoaded){ $('view').innerHTML='<div class="empty">Loading data…</div>'; renderTabs(); await loadAll(); } render(); window.scrollTo(0,0); }
+async function go(tab){ S.tab = tab; if((tab==='salary'||tab==='hisab') && !allLoaded){ $('view').innerHTML='<div class="empty">Loading data…</div>'; renderTabs(); try{ await loadAll(); }catch(e){} } render(); window.scrollTo(0,0); }
 function render(){
   const typeName = { owner:'Owner', supervisor:'Supervisor', accountant:'Accountant' }[me.type];
   $('who').textContent = me.name + ' · ' + typeName;
@@ -476,8 +521,8 @@ function dateBar(){
   return `<div class="datebar"><button onclick="shiftDate(-1)">‹</button><div class="dl" onclick="openCal()">${p.main} <span class="calic">📅</span><small>${p.sub}${S.date===today()?' · Today':''} · tap to change</small><input type="date" id="dateCal" value="${S.date}" max="${today()}" onchange="setDate(this.value)"></div><button onclick="shiftDate(1)">›</button></div>`;
 }
 function openCal(){ const i=$('dateCal'); if(!i) return; try{ i.showPicker(); }catch(e){ i.focus(); i.click(); } }
-async function shiftDate(n){ const d=addDays(S.date,n); if(d>today()) return; S.date=d; await loadMonth(ym(S.date)); render(); }
-async function setDate(v){ if(!v) return; S.date=v; await loadMonth(ym(S.date)); render(); }
+async function shiftDate(n){ const d=addDays(S.date,n); if(d>today()) return; S.date=d; render(); try{ await loadMonth(ym(S.date)); }catch(e){} render(); }
+async function setDate(v){ if(!v) return; S.date=v; render(); try{ await loadMonth(ym(S.date)); }catch(e){} render(); }
 
 /* ---------- ENTRY ---------- */
 function activeEmps(roleId){ return cfg.employees.filter(e => e.active!==false && (e.roles||[]).includes(roleId)).sort((a,b)=>a.name.localeCompare(b.name)); }
@@ -509,6 +554,7 @@ function renderEntry(){
   $('view').innerHTML = `
     ${S.editId ? `<div class="warn" style="margin:0 0 12px"><b>Editing an entry.</b> Make changes below and tap Update.<button class="btn ghost mt" style="padding:9px 0" onclick="cancelEdit()">Cancel edit</button></div>` : ''}
     ${dateBar()}
+    ${loadBanner()}
     <div class="card">
       <div class="row" style="margin-bottom:10px">
         <div><div class="lbl">Unit</div><select onchange="S.unit=this.value">${cfg.units.map(u=>`<option ${u===S.unit?'selected':''}>${esc(u)}</option>`).join('')}</select></div>
@@ -656,7 +702,7 @@ function renderSalary(){
     const ds = Object.entries(days).sort((a,b)=>a[0]<b[0]?1:-1);
     body = ds.length ? ds.map(([d,v])=>`<div class="list-row tap" onclick="jumpEntry('${d}')"><div class="main"><div class="t">${pretty(d).main}</div><div class="s">${v.n} people</div></div><div class="amt">${fmt(v.t)}</div></div>`).join('') : '<div class="empty">No data.</div>';
   }
-  $('view').innerHTML = `
+  $('view').innerHTML = `${loadError?loadBanner():''}
     <div class="card">
       <div class="seg" style="margin-bottom:10px"><button class="${S.per==='month'?'on':''}" onclick="S.per='month';render()">Month</button><button class="${S.per==='range'?'on':''}" onclick="S.per='range';render()">Period</button></div>
       <div class="field"><select onchange="S.person=this.value;render()"><option value="">👥  All workers</option>${cfg.employees.slice().sort((a,b)=>a.name.localeCompare(b.name)).map(e=>`<option value="${e.id}" ${e.id===S.person?'selected':''}>${esc(e.name)} (${e.id})</option>`).join('')}</select></div>
@@ -677,7 +723,7 @@ function renderSalary(){
     <button class="btn ghost mt" onclick="exportXlsx()">Download Excel</button>
     <button class="btn ghost mt" onclick="refreshAll()">Refresh data</button>`;
 }
-async function refreshAll(){ await loadAll(); toast('Refreshed'); render(); }
+async function refreshAll(){ try{ readFailed=false; await loadAll(); toast('Refreshed'); }catch(e){ toast('Could not refresh — check internet'); } render(); }
 async function jumpEntry(d){ S.date=d; await loadMonth(ym(d)); go('entry'); }
 const num = n => (Math.round(n*100)/100).toString();
 function otNote(l){
@@ -714,7 +760,16 @@ function workerHtml(id, inline){
   const ghori = L.reduce((t,l)=>t+l.otGhori,0);
   const hours = L.reduce((t,l)=>t+l.otHours,0);
   const head = `<div class="row" style="align-items:center;gap:12px;margin-bottom:10px"><div class="avatar" style="flex:0 0 46px;width:46px;height:46px;font-size:18px;background:${PALETTE[(parseInt(String(id).replace(/\D/g,''))||0)%PALETTE.length]}">${esc((e.name||'?').slice(0,1))}</div><div><div style="font-family:Fraunces,serif;font-weight:700;font-size:20px">${esc(e.name)}</div><div class="note">${esc(e.id)} · ${(e.roles||[]).map(r=>`<span class="tag" style="background:${roleById(r).color}">${esc(roleById(r).name)}</span>`).join('')}</div></div></div>`;
+  const prof = `<div class="card"><div class="lbl">Profile</div><table class="t">
+      <tr><td>Mobile</td><td class="n">${e.mobile?`<a href="tel:${esc(e.mobile)}">${esc(e.mobile)}</a>`:'—'}</td></tr>
+      <tr><td>Joined</td><td class="n">${e.joined?pretty(e.joined).main:(e.from?pretty(e.from).main:'—')}</td></tr>
+      ${e.father?`<tr><td>Father</td><td class="n">${esc(e.father)}</td></tr>`:''}
+      <tr><td>Bank</td><td class="n">${hasBank(e)?esc((e.bank.bankName||'')+' '+maskAcc(e.bank.acc))+'<div class="note">'+esc(e.bank.ifsc)+'</div>':'<span class="pill no">No bank details</span>'}</td></tr>
+    </table>${(can.owner()||can.hisab())?`<button class="btn ghost mt" style="padding:9px 0" onclick="editEmp('${id}')">Edit details</button>`:''}</div>`;
+  const HA = hisabs.filter(h=>h.emp===id).sort((a,b)=>a.date<b.date?1:-1);
+  const hist = `<div class="card"><div class="lbl">Payment history (all time)</div>${HA.length?HA.map(h=>`<div class="list-row tap" onclick="hisabActions('${h.id}')"><div class="main"><div class="t">Duty up to ${short(h.date)}</div><div class="s">Due ${fmt(h.due)} · ${payModeText(h)}</div></div><div style="text-align:right"><div class="amt">${fmt(h.paid)}</div><div class="note">${h.action==='carry'&&h.balance?'carry '+fmt(h.balance):'paid'}</div></div></div>`).join(''):'<div class="note">Never settled yet.</div>'}</div>`;
   return `${head}
+    ${prof}
     ${pending[id]?`<div class="warn" style="margin:0 0 12px">${pending[id]} ghori shortfall pending — will be deducted from next OT</div>`:''}
     <div class="kpis">
       <div class="kpi hero"><div class="k">Net payable (${short(from)} – ${short(to)})</div><div class="v">${fmt(s.net)}</div></div>
@@ -728,7 +783,7 @@ function workerHtml(id, inline){
       ${Object.keys(s.byUnit).length?`<div class="lbl" style="margin-top:12px">By unit</div><table class="t">${Object.entries(s.byUnit).map(([u,v])=>`<tr><td>${esc(u)}</td><td class="n">${v.days} days</td><td class="n"><b>${fmt(v.total)}</b></td></tr>`).join('')}</table>`:''}</div>
     ${L.length?`<div class="card"><div class="lbl">Daily breakdown</div>${dailyTable(L)}</div>`:''}
     ${A.length?`<div class="card"><div class="lbl">Advances</div><table class="t">${A.map(a=>`<tr><td>${short(a.date)}</td><td>${esc(a.note||'')}</td><td class="n bad">${fmt(a.amount)}</td></tr>`).join('')}</table></div>`:''}
-    <div class="card"><div class="lbl">Settlements</div>${H.length?`<table class="t">${H.map(h=>`<tr><td>${short(h.date)}</td><td class="n">Due ${fmt(h.due)}</td><td class="n">Paid ${fmt(h.paid)}</td><td class="n">${h.action==='carry'?'Carry '+fmt(h.balance):'Nil'}</td></tr>`).join('')}</table>`:`<div class="note">${lastH?'Last settled up to '+pretty(lastH.date).main+(lastH.action==='carry'?' · carried '+fmt(lastH.balance):''):'Never settled yet.'}</div>`}</div>
+    ${hist}
     ${inline?'':'<button class="btn ghost mt" onclick="closeSheet()">Close</button>'}`;
 }
 function showWorker(id){ S.person=id; render(); window.scrollTo(0,0); }
@@ -837,7 +892,7 @@ async function exportXlsx(){
   const X = window.XLSX;
   const { from, to } = period();
   const { lines } = computeLines(allEntries(), cfg);
-  const advances = allAdvances();
+  const advances = effAdvances(allAdvances(), hisabs);
   const sm0 = summarize(lines, advances, cfg, from, to);
   const only = x => !S.person || x.emp===S.person;
   const sm = { emps: sm0.emps.filter(only), lines: sm0.lines.filter(only), advances: sm0.advances.filter(only) };
@@ -876,10 +931,10 @@ async function exportXlsx(){
   const unitRows = [['Name','Unit','Days','Duty','OT','Total']];
   for(const id of ids){ const s=sm.emps.find(e=>e.emp===id); if(!s) continue; for(const [u,v] of Object.entries(s.byUnit)){ const ot=sm.lines.filter(l=>l.emp===id&&l.unit===u).reduce((t,l)=>t+l.ot,0); unitRows.push([empById(id).name,u,v.days,v.total-ot,ot,v.total]); } }
   X.utils.book_append_sheet(wb, sheet(unitRows, [20,10,6,11,11,11], [3,4,5]), 'By unit');
-  const adv = [['Date','ID','Name','Amount','Note']].concat(sm.advances.map(a=>[a.date,a.emp,empById(a.emp).name,Number(a.amount)||0,a.note||'']));
-  X.utils.book_append_sheet(wb, sheet(adv, [11,7,20,11,24], [3]), 'Advances');
-  const hs = [['Settled up to','ID','Name','Earned','Advance','Previous carry','Due','Paid','Balance','Action']].concat(hisabs.filter(h=>h.date>=from&&h.date<=to&&only(h)).map(h=>[h.date,h.emp,empById(h.emp).name,h.earned,h.adv,h.prev,h.due,h.paid,h.balance,h.action==='carry'?'Carry forward':'Nil']));
-  X.utils.book_append_sheet(wb, sheet(hs, [12,7,20,11,11,12,11,11,11,13], [3,4,5,6,7,8]), 'Settlements');
+  const adv = [['Date taken','Booked in settlement','ID','Name','Amount','Note']].concat(sm.advances.map(a=>[a.origDate||a.date,a.origDate?a.date:'',a.emp,empById(a.emp).name,Number(a.amount)||0,a.note||'']));
+  X.utils.book_append_sheet(wb, sheet(adv, [11,12,7,20,11,24], [4]), 'Advances');
+  const hs = [['Duty up to','Advance up to','Paid on','ID','Name','Earned','Advance','Previous carry','Due','Bank','Cash','Paid','Balance','Action']].concat(hisabs.filter(h=>h.date>=from&&h.date<=to&&only(h)).map(h=>[h.date,h.advUpto||h.date,h.paidOn||'',h.emp,empById(h.emp).name,h.earned,h.adv,h.prev,h.due,h.bank||0,h.cash!=null?h.cash:h.paid,h.paid,h.balance,h.action==='carry'?'Carry forward':'Nil']));
+  X.utils.book_append_sheet(wb, sheet(hs, [11,11,11,7,20,11,11,12,11,11,11,11,11,13], [5,6,7,8,9,10,11,12]), 'Settlements');
   X.writeFile(wb, `Bhauti_${S.person?empById(S.person).name.replace(/\W+/g,'_')+'_':''}${from}_to_${to}.xlsx`);
   toast('Excel downloaded ✓');
 }
@@ -891,6 +946,7 @@ function renderAdvance(){
   const list = (m.advances||[]).filter(a=>a.date===S.date).sort((a,b)=>(a.at||0)-(b.at||0));
   const advTotal = list.reduce((t,a)=>t+(Number(a.amount)||0),0);
   $('view').innerHTML = `${dateBar()}
+    ${loadBanner()}
     <div class="card"><div class="ctitle">Add advance</div>
       <div class="field"><select id="advEmp" onchange="S.advEmp=this.value">${empOptions(S.advEmp)}</select></div>
       <div class="field"><input type="number" inputmode="decimal" id="advAmt" class="big-num" placeholder="₹ Amount" value="${S.advAmt||''}" oninput="S.advAmt=this.value"></div>
@@ -916,42 +972,57 @@ async function delAdvance(id){
 }
 
 /* ---------- HISAB ---------- */
+/* ---------- SETTLE / PAY ---------- */
+function payModeText(h){
+  const bank = Number(h.bank)||0, cash = h.cash!=null ? Number(h.cash)||0 : (Number(h.paid)||0) - bank;
+  return [bank?'Bank '+fmt(bank):'', cash?'Cash '+fmt(cash):''].filter(Boolean).join(' + ') || 'Nothing paid';
+}
+function dmy(iso){ if(!iso) return ''; const [y,m,d]=iso.split('-'); return d+'-'+m+'-'+y; }
 function renderHisab(){
+  if(S.payDone) return renderPayDone();
+  const modeSeg = `<div class="seg" style="margin-bottom:12px"><button class="${S.payMode==='one'?'on':''}" onclick="S.payMode='one';render()">One person</button><button class="${S.payMode==='many'?'on':''}" onclick="S.payMode='many';render()">Pay many (bank + cash)</button></div>`;
+  if(S.payMode==='many') return renderPayMany(modeSeg);
   const { lines } = computeLines(allEntries(), cfg);
   let calc = null;
-  if(S.hisEmp) calc = hisabFor(S.hisEmp, S.hisDate, lines, allAdvances(), hisabs, cfg);
-  const paid = Number(S.hisPaid)||0;
-  const bal = calc ? calc.due - paid : 0;
+  if(S.hisEmp) calc = hisabFor(S.hisEmp, S.hisDate, S.hisAdvDate, lines, allAdvances(), hisabs, cfg);
+  const e = S.hisEmp ? empById(S.hisEmp) : null;
   const recent = [...hisabs].filter(h=>!S.hisEmp || h.emp===S.hisEmp).sort((a,b)=> (b.at||0)-(a.at||0)).slice(0,15);
-  $('view').innerHTML = `
+  $('view').innerHTML = `${modeSeg}
     <div class="card"><div class="ctitle">Settle account</div>
-      <div class="field"><select onchange="S.hisEmp=this.value;S.hisPaid='';render()">${empOptions(S.hisEmp)}</select></div>
-      <div class="field"><div class="lbl">Up to date</div><input type="date" value="${S.hisDate}" max="${today()}" onchange="S.hisDate=this.value;render()"></div>
+      <div class="field"><select onchange="S.hisEmp=this.value;S.hisBank='';S.hisCash='';render()">${empOptions(S.hisEmp)}</select></div>
+      <div class="row field"><div><div class="lbl">Duty up to</div><input type="date" value="${S.hisDate}" max="${today()}" onchange="S.hisDate=this.value;if(S.hisAdvDate<this.value)S.hisAdvDate=this.value;render()"></div>
+        <div><div class="lbl">Advances up to</div><input type="date" value="${S.hisAdvDate}" max="${today()}" onchange="S.hisAdvDate=this.value;render()"></div></div>
       ${calc ? `
         <table class="t">
-          <tr><td>Period</td><td class="n">${calc.from?short(calc.from):'Start'} – ${short(S.hisDate)}</td></tr>
+          <tr><td>Duty period</td><td class="n">${calc.from?short(calc.from):'Start'} – ${short(calc.workUpto)}</td></tr>
           <tr><td>Days worked</td><td class="n">${calc.days}</td></tr>
           <tr><td>Duty amount</td><td class="n">${fmt(calc.duty)}</td></tr>
           <tr><td>Overtime amount</td><td class="n">${fmt(calc.ot)}</td></tr>
           <tr><td>Total earned</td><td class="n"><b>${fmt(calc.earned)}</b></td></tr>
-          <tr><td>Advance</td><td class="n bad">− ${fmt(calc.adv)}</td></tr>
+          <tr><td>Advance <div class="note">${calc.advFrom?short(calc.advFrom):'Start'} – ${short(calc.advUpto)}</div></td><td class="n bad">− ${fmt(calc.adv)}</td></tr>
           <tr><td>Previous balance (carried)</td><td class="n">${calc.prev>=0?'+ ':''}${fmt(calc.prev)}</td></tr>
           <tr><td><b>Amount due</b></td><td class="n"><b>${fmt(calc.due)}</b></td></tr>
         </table>
-        <div class="field mt"><div class="lbl">Amount paid</div><input type="number" inputmode="decimal" class="big-num" value="${S.hisPaid}" placeholder="₹ 0" oninput="S.hisPaid=this.value;updBal(${calc.due})"></div>
-        <div id="balBox">${balHtml(bal)}</div>
+        <div class="row field mt"><div><div class="lbl">Paid by bank ${hasBank(e)?'<span class="pill ok">✓</span>':'<span class="pill no">no a/c</span>'}</div><input type="number" inputmode="decimal" id="hBank" value="${S.hisBank}" placeholder="₹ 0" oninput="S.hisBank=this.value;updBal(${calc.due})"></div>
+          <div><div class="lbl">Paid in cash</div><input type="number" inputmode="decimal" id="hCash" value="${S.hisCash}" placeholder="₹ 0" oninput="S.hisCash=this.value;updBal(${calc.due})"></div></div>
+        <div class="act" style="margin-top:-2px"><button onclick="fillPay(${calc.due},'bank')">All bank</button><button onclick="fillPay(${calc.due},'cash')">All cash</button></div>
+        ${!hasBank(e)?`<div class="note mt"><a href="#" onclick="editEmp('${S.hisEmp}');return false">+ Add bank details for ${esc(e.name)}</a></div>`:''}
+        <div id="balBox">${balHtml(calc.due - paidNow())}</div>
         <button class="btn mt" onclick="saveHisab()">Save settlement</button>
-        <button class="btn ghost mt" onclick="openPerson('${S.hisEmp}')">Open full dashboard of this person</button>` : '<div class="note">Select an employee — the period starts automatically from the day after their last settlement.</div>'}
+        <button class="btn ghost mt" onclick="openPerson('${S.hisEmp}')">Open full dashboard of this person</button>` : '<div class="note">Select an employee. Duty starts from the day after their last settlement. Advances can be counted up to a later date (e.g. duty till 20th, advances till today).</div>'}
     </div>
     ${calc ? hisabDetail(calc) : ''}
     <div class="sec">${S.hisEmp?esc(empById(S.hisEmp).name)+" — past settlements":"Past settlements"}</div>
-    <div class="card" style="padding:4px 14px">${recent.length ? recent.map(h=>`<div class="list-row"><div class="main"><div class="t">${esc(empById(h.emp).name)}</div><div class="s">${short(h.date)} · Due ${fmt(h.due)} · Paid ${fmt(h.paid)}</div></div><div style="text-align:right"><div class="amt">${fmt(h.balance)}</div><div class="note">${h.action==='carry'?'Carry forward':'Nil'}</div></div>${can.delete()?`<button class="x" onclick="delHisab('${h.id}')">✕</button>`:''}</div>`).join('') : '<div class="empty">No settlements yet.</div>'}</div>`;
+    <div class="card" style="padding:4px 14px">${recent.length ? recent.map(h=>`<div class="list-row tap" onclick="hisabActions('${h.id}')"><div class="main"><div class="t">${esc(empById(h.emp).name)}</div><div class="s">Duty to ${short(h.date)}${h.advUpto&&h.advUpto!==h.date?' · adv to '+short(h.advUpto):''} · ${payModeText(h)}</div></div><div style="text-align:right"><div class="amt">${fmt(h.balance)}</div><div class="note">${h.action==='carry'?'Carry forward':'Nil'}</div></div></div>`).join('') : '<div class="empty">No settlements yet.</div>'}</div>
+    ${payRunsList()}`;
 }
+function paidNow(){ return (Number(S.hisBank)||0) + (Number(S.hisCash)||0); }
+function fillPay(due, mode){ due=Math.max(0,Math.round(due)); S.hisBank = mode==='bank'?String(due):''; S.hisCash = mode==='cash'?String(due):''; $('hBank').value=S.hisBank; $('hCash').value=S.hisCash; updBal(due); }
 function hisabDetail(c){
-  const from = c.from || '2000-01-01';
+  const from = c.from || '2000-01-01', advFrom = c.advFrom || '2000-01-01';
   const { lines } = computeLines(allEntries(), cfg);
-  const L = lines.filter(l=>l.emp===S.hisEmp && l.date>=from && l.date<=S.hisDate).sort((a,b)=>a.date<b.date?-1:1);
-  const A = allAdvances().filter(a=>a.emp===S.hisEmp && a.date>=from && a.date<=S.hisDate).sort((a,b)=>a.date<b.date?-1:1);
+  const L = lines.filter(l=>l.emp===S.hisEmp && l.date>=from && l.date<=c.workUpto).sort((a,b)=>a.date<b.date?-1:1);
+  const A = allAdvances().filter(a=>a.emp===S.hisEmp && a.date>=advFrom && a.date<=c.advUpto).sort((a,b)=>a.date<b.date?-1:1);
   const byRole = {}; for(const l of L){ const r=byRole[l.role]||(byRole[l.role]={d:0,t:0,ot:0}); r.d++; r.t+=l.total; r.ot+=l.ot; }
   const byQ = {}; for(const l of L){ const q=byQ[l.quality]||(byQ[l.quality]={days:0,duty:0,ot:0,otDays:0,share:0}); q.days++; q.duty+=l.basic; q.ot+=l.ot; if(l.otMode==='ghori'&&l.otGhori>0){ q.otDays++; q.share+=l.otGhori/l.shareN; } }
   return `<div class="sec">${esc(empById(S.hisEmp).name)} — work in this settlement</div>
@@ -959,32 +1030,220 @@ function hisabDetail(c){
       ${Object.keys(byRole).length?`<div class="lbl">By role</div><table class="t">${Object.entries(byRole).map(([rid,v])=>`<tr><td><span class="tag" style="background:${roleById(rid).color}">${esc(roleById(rid).name)}</span></td><td class="n">${v.d} days</td><td class="n">Duty ${fmt(v.t-v.ot)}</td><td class="n">OT ${fmt(v.ot)}</td></tr>`).join('')}</table>`:''}
       ${qualityTable(byQ)}
       ${L.length?`<div class="lbl" style="margin-top:12px">Daily breakdown</div>${dailyTable(L)}`:'<div class="note">No bhauti work in this period.</div>'}
-      ${A.length?`<div class="lbl" style="margin-top:12px">Advances</div><table class="t">${A.map(a=>`<tr><td>${short(a.date)}</td><td>${esc(a.note||'')}</td><td class="n bad">${fmt(a.amount)}</td></tr>`).join('')}</table>`:''}
+      ${A.length?`<div class="lbl" style="margin-top:12px">Advances deducted</div><table class="t">${A.map(a=>`<tr><td>${short(a.date)}</td><td>${esc(a.note||'')}</td><td class="n bad">${fmt(a.amount)}</td></tr>`).join('')}</table>`:''}
     </div>`;
 }
-async function openPerson(id){ S.person=id; S.per='range'; S.from=(hisabFor(id,S.hisDate,computeLines(allEntries(),cfg).lines,allAdvances(),hisabs,cfg).from)||S.from; S.to=S.hisDate; await go('salary'); }
-async function settlePerson(id){ S.hisEmp=id; S.hisPaid=''; S.hisDate=today(); await go('hisab'); }
+async function openPerson(id){ const c=hisabFor(id,S.hisDate,S.hisAdvDate,computeLines(allEntries(),cfg).lines,allAdvances(),hisabs,cfg); S.person=id; S.per='range'; S.from=c.from||S.from; S.to=S.hisDate; await go('salary'); }
+async function settlePerson(id){ S.payMode='one'; S.payDone=null; S.hisEmp=id; S.hisBank=''; S.hisCash=''; S.hisDate=today(); S.hisAdvDate=today(); await go('hisab'); }
 function balHtml(bal){
-  if(Math.round(bal)===0) return `<div class="note">Fully settled ✓</div>`;
+  if(Math.round(bal)===0) return `<div class="note mt">Fully settled ✓</div>`;
   return `<div class="warn">Balance: <b>${fmt(bal)}</b> ${bal>0?'(owed to worker)':'(worker owes)'}
     <div class="seg" style="margin-top:8px"><button class="${S.hisAction==='carry'?'on':''}" onclick="S.hisAction='carry';updBal()">Carry forward</button><button class="${S.hisAction==='nil'?'on':''}" onclick="S.hisAction='nil';updBal()">Mark nil</button></div></div>`;
 }
 let lastDue=0;
-function updBal(due){ if(due!==undefined) lastDue=due; $('balBox').innerHTML = balHtml(lastDue - (Number(S.hisPaid)||0)); }
+function updBal(due){ if(due!==undefined) lastDue=due; $('balBox').innerHTML = balHtml(lastDue - paidNow()); }
+function makeHisab(empId, c, bank, cash, action, batchId){
+  const paid = bank + cash, bal = Math.round(c.due - paid);
+  return { id:uid(), emp:empId, date:c.workUpto, advUpto:c.advUpto, from:c.from, advFrom:c.advFrom, days:c.days, duty:Math.round(c.duty), ot:Math.round(c.ot), earned:Math.round(c.earned), adv:c.adv, prev:c.prev, due:c.due,
+    bank, cash, paid, balance:bal, action: bal===0 ? 'nil' : action, paidOn:today(), batchId, by:me.id, at:Date.now() };
+}
 async function saveHisab(){
   const { lines } = computeLines(allEntries(), cfg);
-  const c = hisabFor(S.hisEmp, S.hisDate, lines, allAdvances(), hisabs, cfg);
+  const c = hisabFor(S.hisEmp, S.hisDate, S.hisAdvDate, lines, allAdvances(), hisabs, cfg);
   if(hisabs.some(h=>h.emp===S.hisEmp && h.date>=S.hisDate)){ toast('A settlement on or after this date already exists'); return; }
-  const paid = Number(S.hisPaid)||0; const bal = c.due - paid;
-  const h = { id:uid(), emp:S.hisEmp, date:S.hisDate, from:c.from, earned:c.earned, adv:c.adv, prev:c.prev, due:c.due, paid, balance:Math.round(bal), action: Math.round(bal)===0 ? 'nil' : S.hisAction, by:me.id, at:Date.now() };
+  const bank = Math.round(Number(S.hisBank)||0), cash = Math.round(Number(S.hisCash)||0);
+  if(bank>0 && !hasBank(empById(S.hisEmp)) && !confirm('No bank details for this person. Save anyway?')) return;
+  const batchId = 'B'+Date.now().toString(36);
+  const h = makeHisab(S.hisEmp, c, bank, cash, S.hisAction, batchId);
   const res = await mutate('hisab', ()=>({list:[]}), d=>{ (d.list=d.list||[]).push(h); });
-  if(res){ hisabs=res.list; S.hisPaid=''; S.hisEmp=''; toast('Settlement saved ✓'); }
+  if(res){ hisabs=res.list; S.hisBank=''; S.hisCash=''; S.hisEmp=''; S.payDone=batchId; toast('Settlement saved ✓'); }
   render();
 }
 async function delHisab(id){
-  if(!confirm('Delete this settlement? Later carried balances may become wrong.')) return;
+  const h = hisabs.find(x=>x.id===id);
+  if(h && hisabs.some(x=>x.emp===h.emp && x.date>h.date)){ toast('Delete the later settlement of this person first'); return; }
+  if(!confirm('Delete this settlement?')) return;
   const res = await mutate('hisab', ()=>({list:[]}), d=>{ d.list=(d.list||[]).filter(h=>h.id!==id); });
-  if(res){ hisabs=res.list; toast('Deleted'); } render();
+  if(res){ hisabs=res.list; toast('Deleted'); closeSheet(); } render();
+}
+
+/* ---------- PAY MANY ---------- */
+function buildPay(){
+  const { lines } = computeLines(allEntries(), cfg);
+  const adv = allAdvances();
+  const rows = {};
+  const ids = new Set(cfg.employees.filter(e=>e.active!==false).map(e=>e.id));
+  for(const l of lines) if(l.date<=S.pay.workUpto) ids.add(l.emp);
+  for(const id of ids){
+    if(hisabs.some(h=>h.emp===id && h.date>=S.pay.workUpto)) continue;
+    const c = hisabFor(id, S.pay.workUpto, S.pay.advUpto, lines, adv, hisabs, cfg);
+    if(!c.days && !c.adv && !c.prev && !c.earned) continue;
+    const old = (S.pay.rows||{})[id];
+    const due = Math.max(0, c.due);
+    const bankOk = hasBank(empById(id));
+    rows[id] = old && old.due===c.due ? { ...old, c } : { c, due:c.due, inc: c.due>0, bank: bankOk?String(due):'', cash: bankOk?'':String(due) };
+  }
+  S.pay.rows = rows;
+}
+function renderPayMany(modeSeg){
+  if(!S.pay) S.pay = { workUpto: today(), advUpto: today(), rows:{}, action:'carry' };
+  buildPay();
+  const ids = Object.keys(S.pay.rows).sort((a,b)=>empById(a).name.localeCompare(empById(b).name));
+  const rowHtml = id => { const r=S.pay.rows[id], e=empById(id), c=r.c; const ok=hasBank(e);
+    return `<div class="payrow ${r.inc?'':'off'}" id="pr_${id}">
+      <div class="row" style="align-items:flex-start"><label class="chk" style="flex:1;padding:0"><input type="checkbox" ${r.inc?'checked':''} onchange="payInc('${id}',this.checked)"> <span><b>${esc(e.name)}</b> <span class="note">${id}</span><br><span class="note">${c.days} days · Duty ${fmt(c.duty)} · OT ${fmt(c.ot)} · Adv −${fmt(c.adv)}${c.prev?' · Prev '+fmt(c.prev):''}</span></span></label>
+        <div style="flex:0 0 auto;text-align:right"><div class="amt">${fmt(c.due)}</div><div class="note">due</div></div></div>
+      <div class="pin"><div style="flex:1"><div class="note">Bank ${ok?'<span class="pill ok">'+esc(maskAcc(e.bank.acc))+'</span>':`<a href="#" class="pill no" onclick="editEmp('${id}');return false">+ add bank</a>`}</div><input type="number" inputmode="decimal" value="${r.bank}" placeholder="0" oninput="payAmt('${id}','bank',this.value)"></div>
+        <div style="flex:1"><div class="note">Cash</div><input type="number" inputmode="decimal" value="${r.cash}" placeholder="0" oninput="payAmt('${id}','cash',this.value)"></div></div>
+      <div class="note" id="pl_${id}">${leftText(id)}</div></div>`; };
+  $('view').innerHTML = `${modeSeg}
+    <div class="card"><div class="ctitle">Pay many people</div>
+      <div class="row field"><div><div class="lbl">Duty up to</div><input type="date" value="${S.pay.workUpto}" max="${today()}" onchange="S.pay.workUpto=this.value;if(S.pay.advUpto<this.value)S.pay.advUpto=this.value;render()"></div>
+        <div><div class="lbl">Advances up to</div><input type="date" value="${S.pay.advUpto}" max="${today()}" onchange="S.pay.advUpto=this.value;render()"></div></div>
+      <div class="note">Example: duty till 20th, advances till today — all advances taken so far are cut from duty up to 20th. Duty from 21st comes in the next payment.</div>
+      <div class="act mt"><button onclick="payAll('auto')">Bank if a/c, else cash</button><button onclick="payAll('cash')">All cash</button><button onclick="payAll('none')">Clear amounts</button></div>
+      <div class="lbl" style="margin-top:12px">If something is left over</div>
+      <div class="seg"><button class="${S.pay.action==='carry'?'on':''}" onclick="S.pay.action='carry';render()">Carry forward</button><button class="${S.pay.action==='nil'?'on':''}" onclick="S.pay.action='nil';render()">Mark nil</button></div>
+    </div>
+    <div class="kpis" id="payTot">${payTotals()}</div>
+    <div class="card" style="padding:4px 14px">${ids.length?ids.map(rowHtml).join(''):'<div class="empty">Nobody has anything due up to this date.</div>'}</div>
+    ${ids.length?`<button class="btn mt" onclick="savePayMany()">Save payments</button>`:''}
+    ${payRunsList()}`;
+}
+function leftText(id){ const r=S.pay.rows[id]; const left = r.c.due - (Number(r.bank)||0) - (Number(r.cash)||0); return Math.round(left)===0 ? '<span class="good">Fully paid ✓</span>' : (left>0 ? `Left ${fmt(left)} → ${S.pay.action==='carry'?'carry forward':'nil'}` : `<span class="bad">Paying ${fmt(-left)} more than due (advance)</span>`); }
+function payTotals(){
+  let n=0, due=0, bank=0, cash=0, miss=0;
+  for(const [id,r] of Object.entries(S.pay.rows)){ if(!r.inc) continue; n++; due+=Math.max(0,r.c.due); const b=Number(r.bank)||0; bank+=b; cash+=Number(r.cash)||0; if(b>0 && !hasBank(empById(id))) miss++; }
+  return `<div class="kpi hero"><div class="k">Total to pay (${n} people)</div><div class="v">${fmt(bank+cash)}</div><div class="note" style="color:#fff;opacity:.85">Total due ${fmt(due)}</div></div>
+    <div class="kpi"><div class="k">By bank</div><div class="v">${fmt(bank)}</div></div>
+    <div class="kpi"><div class="k">Cash</div><div class="v">${fmt(cash)}</div></div>
+    ${miss?`<div class="kpi" style="grid-column:1/-1;background:#fdf5f5"><div class="k bad">${miss} bank payment(s) without bank details</div><div class="note">Add details or move them to cash</div></div>`:''}`;
+}
+function payInc(id, v){ S.pay.rows[id].inc=v; $('pr_'+id).classList.toggle('off',!v); $('payTot').innerHTML=payTotals(); }
+function payAmt(id, k, v){ S.pay.rows[id][k]=v; $('pl_'+id).innerHTML=leftText(id); $('payTot').innerHTML=payTotals(); }
+function payAll(mode){ for(const [id,r] of Object.entries(S.pay.rows)){ const due=String(Math.max(0,Math.round(r.c.due))); const ok=hasBank(empById(id)); if(mode==='none'){ r.bank=''; r.cash=''; } else if(mode==='cash'){ r.bank=''; r.cash=due; } else { r.bank=ok?due:''; r.cash=ok?'':due; } } render(); }
+async function savePayMany(){
+  const rows = Object.entries(S.pay.rows).filter(([id,r])=>r.inc);
+  if(!rows.length){ toast('Tick at least one person'); return; }
+  const miss = rows.filter(([id,r])=>(Number(r.bank)||0)>0 && !hasBank(empById(id)));
+  if(miss.length && !confirm(miss.length+' people have a bank amount but no bank details:\n'+miss.map(([id])=>empById(id).name).join(', ')+'\n\nSave anyway?')) return;
+  const tot = rows.reduce((t,[id,r])=>t+(Number(r.bank)||0)+(Number(r.cash)||0),0);
+  if(!confirm(`Save payments for ${rows.length} people?\nTotal ${fmt(tot)} (duty up to ${pretty(S.pay.workUpto).main}).`)) return;
+  const batchId = 'B'+Date.now().toString(36);
+  const list = rows.map(([id,r])=>makeHisab(id, r.c, Math.round(Number(r.bank)||0), Math.round(Number(r.cash)||0), S.pay.action, batchId));
+  let clash = false;
+  const res = await mutate('hisab', ()=>({list:[]}), d=>{ d.list=d.list||[]; for(const h of list){ if(d.list.some(x=>x.emp===h.emp && x.date>=h.date)){ clash=true; return; } } d.list.push(...list); });
+  if(clash){ toast('Someone was already settled for this date — refresh and try again'); return; }
+  if(res){ hisabs=res.list; S.pay=null; S.payDone=batchId; toast('Payments saved ✓'); }
+  render(); window.scrollTo(0,0);
+}
+function payRunsList(){
+  const groups = {};
+  for(const h of hisabs){ const k=h.batchId||h.id; (groups[k]=groups[k]||[]).push(h); }
+  const runs = Object.entries(groups).filter(([k,v])=>v.length>1 || (v[0].bank>0)).sort((a,b)=>(b[1][0].at||0)-(a[1][0].at||0)).slice(0,8);
+  if(!runs.length) return '';
+  return `<div class="sec">Past payment runs</div><div class="card" style="padding:4px 14px">${runs.map(([k,v])=>{ const bank=v.reduce((t,h)=>t+(Number(h.bank)||0),0), cash=v.reduce((t,h)=>t+(h.cash!=null?Number(h.cash)||0:0),0);
+    return `<div class="list-row tap" onclick="S.payDone='${k}';render();window.scrollTo(0,0)"><div class="main"><div class="t">${v.length} ${v.length===1?'person':'people'} · duty to ${short(v[0].date)}</div><div class="s">Paid ${short(v[0].paidOn||v[0].date)} · Bank ${fmt(bank)} · Cash ${fmt(cash)}</div></div><span class="note">›</span></div>`; }).join('')}</div>`;
+}
+function batchList(batchId){ return hisabs.filter(h=>(h.batchId||h.id)===batchId).sort((a,b)=>empById(a.emp).name.localeCompare(empById(b.emp).name)); }
+function renderPayDone(){
+  const L = batchList(S.payDone);
+  if(!L.length){ S.payDone=null; return renderHisab(); }
+  const bank=L.reduce((t,h)=>t+(Number(h.bank)||0),0), cash=L.reduce((t,h)=>t+(h.cash!=null?Number(h.cash)||0:0),0);
+  const bankN = L.filter(h=>h.bank>0).length;
+  $('view').innerHTML = `
+    <div class="kpis"><div class="kpi hero"><div class="k">Payments saved — duty up to ${pretty(L[0].date).main}</div><div class="v">${fmt(bank+cash)}</div><div class="note" style="color:#fff;opacity:.85">${L.length} ${L.length===1?'person':'people'}</div></div>
+      <div class="kpi"><div class="k">By bank (${bankN})</div><div class="v">${fmt(bank)}</div></div><div class="kpi"><div class="k">Cash (${L.length-bankN})</div><div class="v">${fmt(cash)}</div></div></div>
+    <div class="card"><div class="ctitle">Next steps</div>
+      ${bankN?`<button class="btn" onclick="bankExcel('${S.payDone}')">⬇ Download bank transfer Excel</button>`:''}
+      <button class="btn gold mt" onclick="printVouchers('${S.payDone}')">🧾 Print / save vouchers (PDF)</button>
+      ${cash?`<button class="btn ghost mt" onclick="printCashList('${S.payDone}')">💵 Print cash payment list</button>`:''}
+    </div>
+    <div class="sec">Send message to each person</div>
+    <div class="card" style="padding:4px 14px">${L.map(h=>{ const e=empById(h.emp); const m=(e.mobile||'').replace(/\D/g,''); const txt=encodeURIComponent(msgFor(h));
+      return `<div class="list-row" style="display:block"><div class="row"><div class="main"><div class="t">${esc(e.name)}</div><div class="s">${payModeText(h)}${h.balance?' · '+(h.action==='carry'?'carry ':'nil ')+fmt(h.balance):''}</div></div></div>
+        ${m.length===10?`<div class="act"><a href="sms:${m}?&body=${txt}">SMS</a><a class="wa" href="https://wa.me/91${m}?text=${txt}" target="_blank">WhatsApp</a><button onclick="printVouchers('${S.payDone}','${h.id}')">Voucher</button></div>`:`<div class="act"><button onclick="editEmp('${h.emp}')">+ Add mobile</button><button onclick="printVouchers('${S.payDone}','${h.id}')">Voucher</button></div>`}</div>`; }).join('')}</div>
+    <button class="btn ghost mt" onclick="S.payDone=null;render()">← Back to Settle</button>`;
+}
+function hisabActions(id){
+  const h = hisabs.find(x=>x.id===id); if(!h) return;
+  const e = empById(h.emp); const m=(e.mobile||'').replace(/\D/g,''); const txt=encodeURIComponent(msgFor(h));
+  openSheet(`<h2>${esc(e.name)}</h2><p class="sub">Duty ${h.from?short(h.from):'start'} – ${short(h.date)}${h.advUpto&&h.advUpto!==h.date?' · advances to '+short(h.advUpto):''}</p>
+    <table class="t"><tr><td>Duty</td><td class="n">${fmt(h.duty!=null?h.duty:h.earned)}</td></tr>${h.ot!=null?`<tr><td>Overtime</td><td class="n">${fmt(h.ot)}</td></tr>`:''}<tr><td>Advance</td><td class="n bad">− ${fmt(h.adv)}</td></tr><tr><td>Previous balance</td><td class="n">${fmt(h.prev)}</td></tr><tr><td><b>Due</b></td><td class="n"><b>${fmt(h.due)}</b></td></tr><tr><td>Paid</td><td class="n">${payModeText(h)}</td></tr><tr><td>Balance</td><td class="n">${fmt(h.balance)} ${h.action==='carry'?'(carry)':'(nil)'}</td></tr></table>
+    <div class="act mt">${m.length===10?`<a href="sms:${m}?&body=${txt}">SMS</a><a class="wa" href="https://wa.me/91${m}?text=${txt}" target="_blank">WhatsApp</a>`:''}<button onclick="printVouchers('${h.batchId||h.id}','${h.id}')">Voucher</button>${(h.batchId)?`<button onclick="closeSheet();S.tab='hisab';S.payDone='${h.batchId}';render()">Whole run</button>`:''}</div>
+    ${can.delete()?`<button class="btn danger mt" onclick="delHisab('${h.id}')">Delete settlement</button>`:''}
+    <button class="btn ghost mt" onclick="closeSheet()">Close</button>`);
+}
+function coName(){ return (cfg.company && cfg.company.name) || 'Salary'; }
+function msgFor(h){
+  const e = empById(h.emp); const bank=Number(h.bank)||0, cash=h.cash!=null?Number(h.cash)||0:Number(h.paid)||0;
+  let t = `${coName()}: Salary paid to ${e.name} (${h.emp}). Duty ${h.from?dmy(h.from)+' to ':'up to '}${dmy(h.date)}: Duty Rs ${Math.round(h.duty!=null?h.duty:h.earned)}${h.ot?', OT Rs '+Math.round(h.ot):''}. Advance cut Rs ${Math.round(h.adv)}${h.prev?', Previous balance Rs '+Math.round(h.prev):''}. Net Rs ${Math.round(h.due)}. Paid: `;
+  t += [bank?`Bank Rs ${bank}`:'', cash?`Cash Rs ${cash}`:''].filter(Boolean).join(' + ') || 'Rs 0';
+  if(h.balance && h.action==='carry') t += `. Balance Rs ${h.balance} carried forward`;
+  return t + '.';
+}
+function voucherHtml(h){
+  const e = empById(h.emp); const bank=Number(h.bank)||0, cash=h.cash!=null?Number(h.cash)||0:Number(h.paid)||0;
+  const co = cfg.company || {};
+  return `<div class="voucher"><div class="vh"><div><h3>${esc(co.name||'Salary Payment')}</h3><div>Salary Payment Voucher</div></div><div style="text-align:right">No. ${esc(h.id.slice(-6).toUpperCase())}<br>Date ${dmy(h.paidOn||h.date)}</div></div>
+    <table><tr><td>Employee</td><td><b>${esc(e.name)}</b> (${esc(h.emp)})${e.mobile?' · '+esc(e.mobile):''}</td></tr>
+    <tr><td>Duty period</td><td>${h.from?dmy(h.from):'Start'} to ${dmy(h.date)}${h.days!=null?' · '+h.days+' days':''}</td></tr>
+    ${h.advUpto?`<tr><td>Advances counted</td><td>${h.advFrom?dmy(h.advFrom):'Start'} to ${dmy(h.advUpto)}</td></tr>`:''}</table>
+    <table style="margin-top:6px"><tr><td>Duty amount</td><td class="n">${fmt(h.duty!=null?h.duty:h.earned)}</td></tr>
+    ${h.ot!=null?`<tr><td>Overtime</td><td class="n">${fmt(h.ot)}</td></tr>`:''}
+    ${h.prev?`<tr><td>Previous balance</td><td class="n">${fmt(h.prev)}</td></tr>`:''}
+    <tr><td>Less: Advance</td><td class="n">− ${fmt(h.adv)}</td></tr>
+    <tr class="tot"><td>Net payable</td><td class="n">${fmt(h.due)}</td></tr>
+    ${bank?`<tr><td>Paid by bank ${hasBank(e)?'('+esc((e.bank.bankName||'')+' '+maskAcc(e.bank.acc))+')':''}</td><td class="n">${fmt(bank)}</td></tr>`:''}
+    ${cash?`<tr><td>Paid in cash</td><td class="n">${fmt(cash)}</td></tr>`:''}
+    <tr class="tot"><td>Balance ${h.balance?(h.action==='carry'?'(carried forward)':'(written off)'):''}</td><td class="n">${fmt(h.balance)}</td></tr></table>
+    <div class="sig"><div>Receiver's signature</div><div>Prepared by</div><div>Authorised signatory</div></div></div>`;
+}
+function showPrint(html, title){
+  $('printArea').innerHTML = html;
+  openSheet(`<h2>${esc(title)}</h2><p class="sub">Tap Print, then choose "Save as PDF" to share on WhatsApp, or print on paper.</p>
+    <button class="btn" onclick="window.print()">🖨 Print / Save PDF</button><button class="btn ghost mt" onclick="closeSheet()">Close</button>
+    <div style="margin-top:14px;max-height:55vh;overflow:auto">${html}</div>`);
+}
+function printVouchers(batchId, onlyId){
+  const L = batchList(batchId).filter(h=>!onlyId || h.id===onlyId);
+  showPrint(L.map(voucherHtml).join(''), L.length===1 ? 'Voucher — '+empById(L[0].emp).name : L.length+' vouchers');
+}
+function printCashList(batchId){
+  const L = batchList(batchId).filter(h=>(h.cash!=null?Number(h.cash):0)>0);
+  const tot = L.reduce((t,h)=>t+Number(h.cash),0);
+  showPrint(`<div class="voucher"><div class="vh"><div><h3>${esc(coName())}</h3><div>Cash salary payments — duty up to ${dmy(L[0]?L[0].date:'')}</div></div><div style="text-align:right">Date ${dmy(today())}</div></div>
+    <table><tr><td><b>#</b></td><td><b>Name</b></td><td><b>ID</b></td><td class="n"><b>Cash</b></td><td style="width:35%"><b>Signature</b></td></tr>
+    ${L.map((h,i)=>`<tr><td>${i+1}</td><td>${esc(empById(h.emp).name)}</td><td>${h.emp}</td><td class="n">${fmt(h.cash)}</td><td style="border-bottom:1px solid #999;height:26px"></td></tr>`).join('')}
+    <tr class="tot"><td></td><td>Total</td><td></td><td class="n">${fmt(tot)}</td><td></td></tr></table></div>`, 'Cash payment list');
+}
+async function bankExcel(batchId){
+  toast('Preparing bank Excel…');
+  try{ await loadXLSX(); }catch(e){ toast('Could not load Excel — check connection'); return; }
+  const X = window.XLSX; const co = cfg.company || {};
+  const L = batchList(batchId).filter(h=>Number(h.bank)>0);
+  const H = { font:{bold:true,color:{rgb:'FFFFFF'}}, fill:{fgColor:{rgb:'1D5A52'}}, alignment:{horizontal:'center',wrapText:true} };
+  const rows = [['Sr No','Beneficiary Name','Account Number','IFSC Code','Bank Name','Amount','Transfer Type','Narration','Employee ID','Mobile']];
+  const problems = [];
+  L.forEach((h,i)=>{ const e=empById(h.emp); const b=e.bank||{}; const ifsc=(b.ifsc||'').toUpperCase();
+    if(!hasBank(e)) problems.push([e.name, h.emp, 'Bank details missing', Number(h.bank)]);
+    rows.push([i+1, (b.holder||e.name), String(b.acc||''), ifsc, b.bankName||'', Number(h.bank), ifsc.startsWith('HDFC')?'IFT (HDFC to HDFC)':'NEFT', ('Salary '+dmy(h.date)).slice(0,30), h.emp, e.mobile||'']); });
+  const total = L.reduce((t,h)=>t+Number(h.bank),0);
+  rows.push(['','TOTAL','','','',total,'','','','']);
+  const ws = X.utils.aoa_to_sheet(rows);
+  const rng = X.utils.decode_range(ws['!ref']);
+  for(let c=0;c<=rng.e.c;c++){ const cell=ws[X.utils.encode_cell({r:0,c})]; if(cell) cell.s=H; }
+  for(let r=1;r<=rng.e.r;r++){ const a=ws[X.utils.encode_cell({r,c:2})]; if(a){ a.t='s'; a.z='@'; } const m=ws[X.utils.encode_cell({r,c:5})]; if(m && m.t==='n') m.z='#,##0.00'; }
+  const last = rng.e.r; for(let c=0;c<=rng.e.c;c++){ const cell=ws[X.utils.encode_cell({r:last,c})]; if(cell) cell.s={font:{bold:true}}; }
+  ws['!cols']=[6,26,20,13,20,12,18,22,10,12].map(w=>({wch:w}));
+  const wb = X.utils.book_new();
+  X.utils.book_append_sheet(wb, ws, 'Bank Transfer');
+  const info = [['Company', co.name||''],['Debit account no.', co.acc||''],['Company IFSC', co.ifsc||''],['Payment date', dmy(today())],['Duty up to', dmy(L[0]?L[0].date:'')],['Number of transfers', L.length],['Total amount', total]];
+  const wi = X.utils.aoa_to_sheet(info); wi['!cols']=[{wch:22},{wch:30}];
+  X.utils.book_append_sheet(wb, wi, 'Details');
+  if(problems.length){ const wp = X.utils.aoa_to_sheet([['Name','ID','Problem','Amount']].concat(problems)); wp['!cols']=[{wch:24},{wch:8},{wch:24},{wch:10}]; X.utils.book_append_sheet(wb, wp, 'CHECK - Missing'); }
+  X.writeFile(wb, `Bank_Transfer_${(co.name||'Salary').replace(/\W+/g,'_')}_${today()}.xlsx`);
+  toast(problems.length ? problems.length+' with missing bank details — see CHECK sheet' : 'Bank Excel downloaded ✓');
 }
 
 /* ---------- SETTINGS ---------- */
@@ -993,11 +1252,17 @@ function renderSettings(){
   if(!can.owner()) S.setTab='emps';
   if(S.setTab==='emps'){
     const list=[...cfg.employees].sort((a,b)=>(b.active!==false)-(a.active!==false)||a.name.localeCompare(b.name));
-    body = `<button class="btn mt" style="margin:0 0 10px" onclick="editEmp()">+ New employee</button><div class="card" style="padding:4px 14px">${list.map(e=>`<div class="list-row ${can.owner()?'tap':''}" ${can.owner()?`onclick="editEmp('${e.id}')"`:''} style="${e.active===false?'opacity:.45':''}"><div class="main"><div class="t">${esc(e.name)} <span class="note">${e.id}</span></div><div class="s">${(e.roles||[]).map(r=>`<span class="tag" style="background:${roleById(r).color}">${esc(roleById(r).name)}</span>`).join('')}${e.active===false?' Inactive':''}</div></div><span class="note">›</span></div>`).join('')}</div>`;
+    body = `<button class="btn mt" style="margin:0 0 10px" onclick="editEmp()">+ New employee</button><div class="card" style="padding:4px 14px">${list.map(e=>`<div class="list-row ${(can.owner()||can.hisab())?'tap':''}" ${(can.owner()||can.hisab())?`onclick="editEmp('${e.id}')"`:''} style="${e.active===false?'opacity:.45':''}"><div class="main"><div class="t">${esc(e.name)} <span class="note">${e.id}</span></div><div class="s">${(e.roles||[]).map(r=>`<span class="tag" style="background:${roleById(r).color}">${esc(roleById(r).name)}</span>`).join('')}${e.active===false?' Inactive':''} ${(can.owner()||can.hisab())?(hasBank(e)?'<span class="pill ok">Bank ✓</span>':'<span class="pill no">No bank</span>'):''}${e.mobile?' <span class="note">📱'+esc(e.mobile)+'</span>':''}</div></div><span class="note">›</span></div>`).join('')}</div>`;
   } else if(S.setTab==='roles'){
     body = `<button class="btn mt" style="margin:0 0 10px" onclick="editRole()">+ New role</button><div class="card" style="padding:4px 14px">${cfg.roles.map(r=>{ const rt=rateFor(r,today()); return `<div class="list-row tap" onclick="editRole('${r.id}')"><div class="avatar" style="background:${r.color}">${esc(r.name.slice(0,1))}</div><div class="main"><div class="t">${esc(r.name)}</div><div class="s">${r.payType==='monthly'?'Monthly '+fmt(rt.monthly)+' · no OT':'Daily '+fmt(rt.daily)+' · '+r.basicHours+' hrs · OT '+({ghori:'by ghori',hours:'by hours ('+CUR+(Number(rt.hourly)||0).toLocaleString('en-IN')+'/hr)',none:'none'})[r.otMode]}${r.otMode==='hours'&&!rt.hourly?' · <b class="bad">set hourly rate</b>':''}</div></div><span class="note">›</span></div>`; }).join('')}</div>`;
   } else if(S.setTab==='units'){
-    body = `<div class="card"><div class="ctitle">Basic ghori per Karigar</div><div class="row"><div><div class="lbl">Special</div><input type="number" id="tgS" value="${cfg.targets.Special}"></div><div><div class="lbl">Chalu</div><input type="number" id="tgC" value="${cfg.targets.Chalu}"></div></div><button class="btn mt" onclick="saveTargets()">Save</button></div>
+    const co = cfg.company || {};
+    body = `<div class="card"><div class="ctitle">Company (for vouchers, SMS, bank file)</div>
+        <div class="field"><div class="lbl">Company name</div><input type="text" id="coName" value="${esc(co.name||'')}" placeholder="Company name"></div>
+        <div class="field"><div class="lbl">Company bank account no. (debit a/c)</div><input type="text" id="coAcc" inputmode="numeric" value="${esc(co.acc||'')}"></div>
+        <div class="field"><div class="lbl">Company IFSC</div><input type="text" id="coIfsc" style="text-transform:uppercase" maxlength="11" value="${esc(co.ifsc||'')}"></div>
+        <button class="btn" onclick="saveCompany()">Save</button></div>
+      <div class="card"><div class="ctitle">Basic ghori per Karigar</div><div class="row"><div><div class="lbl">Special</div><input type="number" id="tgS" value="${cfg.targets.Special}"></div><div><div class="lbl">Chalu</div><input type="number" id="tgC" value="${cfg.targets.Chalu}"></div></div><button class="btn mt" onclick="saveTargets()">Save</button></div>
       <div class="card"><div class="ctitle">Units</div>${cfg.units.map((u,i)=>`<div class="list-row"><div class="main"><div class="t">${esc(u)}</div></div><button class="x" onclick="delUnit(${i})">✕</button></div>`).join('')}<div class="row mt"><input type="text" id="newUnit" placeholder="Unit name"><button class="btn" style="flex:0 0 90px" onclick="addUnit()">Add</button></div></div>`;
   } else {
     body = `<button class="btn mt" style="margin:0 0 10px" onclick="editUser()">+ New user (Supervisor / Accountant)</button><div class="card" style="padding:4px 14px">${cfg.users.map(u=>`<div class="list-row tap" onclick="editUser('${u.id}')"><div class="main"><div class="t">${esc(u.name)}${u.id===me.id?' (you)':''}</div><div class="s">${({owner:'Owner — full access',supervisor:'Supervisor — bhauti entry only',accountant:'Accountant — entry + advance'+(u.perms&&u.perms.salary?' + salary/hisab':'')})[u.type]}${u.perms&&u.perms.editEntries?' · can edit':''}${u.perms&&u.perms.addEmp?' · can add employees':''}</div></div><span class="note">›</span></div>`).join('')}</div>
@@ -1013,22 +1278,57 @@ async function saveCfg(fn){
 }
 function editEmp(id){
   const e = id ? cfg.employees.find(x=>x.id===id) : { name:'', roles:[], active:true };
+  const bk = e.bank || {};
+  const full = !id || can.owner() || can.hisab();
+  const f = (lbl, idn, val, extra='') => `<div class="field"><div class="lbl">${lbl}</div><input type="text" id="${idn}" value="${esc(val||'')}" ${extra}></div>`;
   openSheet(`<h2>${id?'Edit employee':'New employee'}</h2><p class="sub">${id?'ID: '+id:'ID will be generated automatically'}</p>
-    <div class="field"><div class="lbl">Name</div><input type="text" id="eName" value="${esc(e.name)}"></div>
+    ${f('Name','eName',e.name)}
     <div class="lbl">Roles this person can do</div>
     ${cfg.roles.map(r=>`<label class="chk"><input type="checkbox" class="eRole" value="${r.id}" ${(e.roles||[]).includes(r.id)?'checked':''}> <span class="tag" style="background:${r.color}">${esc(r.name)}</span></label>`).join('')}
     ${id?`<label class="chk"><input type="checkbox" id="eActive" ${e.active!==false?'checked':''}> Active (currently working)</label>`:''}
+    ${full?`<div class="sec" style="margin-left:0">Personal details</div>
+    <div class="row">${f('Mobile (10 digits)','eMob',e.mobile,'inputmode="numeric" maxlength="10"')}${f('Joining date','eJoin',e.joined,'type="date"').replace('type="text" ','')}</div>
+    ${f("Father's name",'eFather',e.father)}
+    ${f('Address','eAddr',e.address)}
+    ${f('Aadhaar / ID no. (optional)','eIdNo',e.idNo)}
+    <div class="sec" style="margin-left:0">Bank details (for transfer)</div>
+    ${f('Account holder name','bHolder',bk.holder)}
+    ${f('Account number','bAcc',bk.acc,'inputmode="numeric"')}
+    ${f('Confirm account number','bAcc2',bk.acc,'inputmode="numeric"')}
+    <div class="row">${f('IFSC','bIfsc',bk.ifsc,'style="text-transform:uppercase" maxlength="11" oninput="ifscHint(this.value)"')}${f('Bank name','bBank',bk.bankName)}</div>
+    <div class="note" id="ifscNote"></div>
+    ${f('UPI ID (optional)','bUpi',bk.upi)}`:`${f('Mobile (10 digits)','eMob',e.mobile,'inputmode="numeric" maxlength="10"')}`}
     <button class="btn mt" onclick="saveEmp('${id||''}')">Save</button><button class="btn ghost mt" onclick="closeSheet()">Cancel</button>`);
 }
+const IFSC_RE = /^[A-Z]{4}0[A-Z0-9]{6}$/;
+function ifscHint(v){ v=(v||'').toUpperCase(); const n=$('ifscNote'); if(!n) return; if(!v){ n.textContent=''; return; } n.innerHTML = IFSC_RE.test(v) ? '<span class="good">IFSC looks correct ✓</span>'+(v.startsWith('HDFC')&&!$('bBank').value?'':'') : '<span class="bad">IFSC should be 11 letters like HDFC0001234</span>'; if(IFSC_RE.test(v) && !$('bBank').value){ const map={HDFC:'HDFC Bank',SBIN:'State Bank of India',PUNB:'Punjab National Bank',ICIC:'ICICI Bank',UTIB:'Axis Bank',BARB:'Bank of Baroda',CNRB:'Canara Bank',UBIN:'Union Bank of India',BKID:'Bank of India',IDIB:'Indian Bank',KKBK:'Kotak Mahindra Bank',YESB:'Yes Bank',IOBA:'Indian Overseas Bank',CBIN:'Central Bank of India',MAHB:'Bank of Maharashtra',UCBA:'UCO Bank',PSIB:'Punjab & Sind Bank',AIRP:'Airtel Payments Bank',IPOS:'India Post Payments Bank',FINO:'Fino Payments Bank'}; if(map[v.slice(0,4)]) $('bBank').value=map[v.slice(0,4)]; } }
+function hasBank(e){ const b=(e&&e.bank)||{}; return !!(b.acc && IFSC_RE.test((b.ifsc||'').toUpperCase())); }
+function maskAcc(a){ a=String(a||''); return a ? 'XXXX'+a.slice(-4) : ''; }
 async function saveEmp(id){
-  if(id && !can.owner()){ toast('Only the owner can change an employee'); return; }
+  if(id && !(can.owner() || can.hisab())){ toast('Only the owner can change an employee'); return; }
   const name=$('eName').value.trim(); const roles=[...document.querySelectorAll('.eRole:checked')].map(c=>c.value);
   if(!name){ toast('Enter a name'); return; } if(!roles.length){ toast('Select at least one role'); return; }
+  const v = i => $(i) ? $(i).value.trim() : undefined;
+  const mobile = (v('eMob')||'').replace(/\D/g,'');
+  if(mobile && mobile.length!==10){ toast('Mobile must be 10 digits'); return; }
+  let bank;
+  if($('bAcc')){
+    const acc = v('bAcc').replace(/\s/g,''), acc2 = v('bAcc2').replace(/\s/g,''), ifsc = v('bIfsc').toUpperCase();
+    if(acc || ifsc){
+      if(acc !== acc2){ toast('Account numbers do not match'); return; }
+      if(!/^\d{6,18}$/.test(acc)){ toast('Account number should be 6–18 digits'); return; }
+      if(!IFSC_RE.test(ifsc)){ toast('IFSC is not correct'); return; }
+    }
+    bank = { holder:v('bHolder'), acc, ifsc, bankName:v('bBank'), upi:v('bUpi') };
+  }
   const active = id ? $('eActive').checked : true;
+  const extra = {}; if(mobile!==undefined) extra.mobile = mobile;
+  if($('eFather')){ extra.father=v('eFather'); extra.address=v('eAddr'); extra.idNo=v('eIdNo'); extra.joined=v('eJoin'); }
   await saveCfg(c=>{
-    if(id){ const e=c.employees.find(x=>x.id===id); e.name=name; e.roles=roles; if(e.active!==false && !active) e.to=today(); if(active){ delete e.to; } e.active=active; }
-    else { c.nextNo=c.nextNo||c.employees.length+1; c.employees.push({ id:'E'+String(c.nextNo++).padStart(3,'0'), name, roles, active:true, from:today() }); }
+    if(id){ const e=c.employees.find(x=>x.id===id); e.name=name; e.roles=roles; Object.assign(e, extra); if(bank) e.bank=bank; if(e.active!==false && !active) e.to=today(); if(active){ delete e.to; } e.active=active; }
+    else { c.nextNo=c.nextNo||c.employees.length+1; const ne={ id:'E'+String(c.nextNo++).padStart(3,'0'), name, roles, active:true, from:extra.joined||today(), ...extra }; if(bank) ne.bank=bank; c.employees.push(ne); }
   });
+  if(S.tab==='hisab' && S.payMode==='many' && S.pay) render();
 }
 function editRole(id){
   const r = id ? cfg.roles.find(x=>x.id===id) : { name:'', color:PALETTE[cfg.roles.length%PALETTE.length], payType:'daily', otMode:'hours', countsForBasic:false, basicHours:8, rates:[{from:'2020-01-01',daily:0,hourly:0,monthly:0}] };
@@ -1055,6 +1355,7 @@ async function saveRole(id){
     } else c.roles.push({ id:'r_'+uid(), color:PALETTE[c.roles.length%PALETTE.length], ...fields, rates:[{from:'2020-01-01', ...rate}] });
   });
 }
+async function saveCompany(){ const name=$('coName').value.trim(), acc=$('coAcc').value.replace(/\s/g,''), ifsc=$('coIfsc').value.trim().toUpperCase(); await saveCfg(c=>{ c.company={ name, acc, ifsc }; }); }
 async function saveTargets(){ const s=Number($('tgS').value), ch=Number($('tgC').value); if(!(s>0&&ch>0)){ toast('Enter valid numbers'); return; } await saveCfg(c=>{ c.targets={Special:s,Chalu:ch}; }); }
 async function addUnit(){ const n=$('newUnit').value.trim(); if(!n) return; await saveCfg(c=>{ if(!c.units.includes(n)) c.units.push(n); }); }
 async function delUnit(i){ if(cfg.units.length<=1){ toast('At least one unit is required'); return; } if(!confirm('Remove this unit? Past entries stay as they are.')) return; await saveCfg(c=>{ c.units.splice(i,1); }); }
@@ -1114,8 +1415,9 @@ async function enterApp(){
   if(!months[ym(S.date)]) months[ym(S.date)] = { entries:[], advances:[] };
   $('app').style.display='block'; render();
   // fetch this month's data in the background, then refresh the screen
-  loadMonth(ym(S.date), true).then(()=>{ if(me && S.tab==='entry') render(); }).catch(e=>console.error(e));
-  if(can.salary()) loadAll().then(()=>{ if(me && (S.tab==='salary'||S.tab==='hisab')) render(); }).catch(e=>console.error(e));
+  const refresh = ()=>{ if(me && !S.editId && $('sheetOverlay').classList.contains('hidden')) render(); };
+  loadMonth(ym(S.date), true).then(refresh, ()=>refresh());
+  if(can.salary()) loadAll().then(refresh, ()=>refresh());
 }
 async function finishSetup(){
   const name=$('setupName').value.trim(), pin=$('setupPin').value.trim();
@@ -1191,6 +1493,9 @@ function init(){
     const h = cfg.employees.filter(e=>e.roles.includes('r_h') && !e.roles.includes('r_k')).slice(0,2).map(e=>e.id);
     const ex = cfg.employees.find(e=>e.name==='Virendra LKO').id;
     cfg.roles[2].rates[0].hourly = 62.5;
+    cfg.company = { name:'Demo Company', acc:'50200012345678', ifsc:'HDFC0001234' };
+    cfg.employees[0].mobile='9876543210'; cfg.employees[0].bank={ holder:cfg.employees[0].name, acc:'50100123456789', ifsc:'HDFC0000123', bankName:'HDFC Bank' };
+    cfg.employees[1].mobile='9876500000'; cfg.employees[1].bank={ holder:cfg.employees[1].name, acc:'31234567890', ifsc:'SBIN0001234', bankName:'State Bank of India' };
     const mk = (date, unit, quality, ghori, extra) => ({ id:uid(), date, shift:'Day', unit, quality, ghori, adjust:true, by:'u_owner', at:Date.now(), people:[...k.map(id=>({emp:id,role:'r_k'})), ...h.map(id=>({emp:id,role:'r_h'})), ...(extra?[{emp:ex,role:'r_e',otHours:2}]:[])] });
     const ents = [mk(addDays(d,-2),'Unit 2','Chalu',31,false), mk(y,'Unit 1','Special',25,true), mk(d,'Unit 1','Special',15,false)];
     const months2 = {}; for(const e of ents){ (months2[ym(e.date)] = months2[ym(e.date)] || {entries:[],advances:[]}).entries.push(e); }
@@ -1205,7 +1510,7 @@ function init(){
     else { started=false; me=null; cryptoKey=null; ['passOverlay','pinOverlay','setupOverlay'].forEach(i=>$(i).classList.add('hidden')); $('app').style.display='none'; $('tabs').style.display='none'; $('authOverlay').classList.remove('hidden'); }
   });
 }
-Object.assign(window, { S, go, applyFilter, openCal, toggleNoOt, startEdit, cancelEdit, openPerson, settlePerson, render, shiftDate, setDate, toggleEmp, saveEntry, delEntry, showEntry, checkShort, refreshAll, jumpEntry, showWorker, exportXlsx,
+Object.assign(window, { S, go, retryLoad, fillPay, hisabActions, payInc, payAmt, payAll, savePayMany, printVouchers, printCashList, bankExcel, ifscHint, saveCompany, applyFilter, openCal, toggleNoOt, startEdit, cancelEdit, openPerson, settlePerson, render, shiftDate, setDate, toggleEmp, saveEntry, delEntry, showEntry, checkShort, refreshAll, jumpEntry, showWorker, exportXlsx,
   saveAdvance, delAdvance, saveHisab, delHisab, updBal, editEmp, saveEmp, editRole, saveRole, saveTargets, addUnit, delUnit, editUser, saveUser, delUser,
   openSheet, closeSheet, pinPress, dots, lockApp, finishSetup, doPass, doAuthLogin, signOutDevice, $,
   pinClear, pinBack });
