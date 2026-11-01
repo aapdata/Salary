@@ -681,16 +681,29 @@ function period(){
   if(S.per==='month'){ const [y,m]=S.month.split('-').map(Number); return { from:S.month+'-01', to:S.month+'-'+String(new Date(y,m,0).getDate()).padStart(2,'0') }; }
   return { from:S.from, to:S.to };
 }
+/* What is still owed to a worker today, after all settlements. */
+function balanceNow(id, lines, adv){
+  const t = today();
+  const last = hisabs.filter(h=>h.emp===id).sort((a,b)=>a.date<b.date?-1:1).pop();
+  if(!last || last.date < t) return hisabFor(id, t, t, lines, adv, hisabs, cfg).due;
+  const advCut = last.advUpto && last.advUpto > last.date ? last.advUpto : last.date;
+  return Math.round((last.action==='carry' ? Number(last.balance)||0 : 0) - adv.filter(a=>a.emp===id && a.date>advCut).reduce((x,a)=>x+(Number(a.amount)||0),0));
+}
+function paidIn(id, from, to){ return hisabs.filter(h=>(!id||h.emp===id) && (h.paidOn||h.date)>=from && (h.paidOn||h.date)<=to).reduce((x,h)=>x+(Number(h.paid)||0),0); }
 function renderSalary(){
   const { from, to } = period();
   const { lines } = computeLines(allEntries(), cfg);
   const sm = summarize(lines, allAdvances(), cfg, from, to);
   const emps = sm.emps.sort((a,b)=> b.total-a.total);
+  const advAll = allAdvances();
+  const nowBal = {}; for(const e of emps) nowBal[e.emp] = balanceNow(e.emp, lines, advAll);
+  const totNow = cfg.employees.reduce((x,e)=>x+Math.max(0,(e.id in nowBal)?nowBal[e.id]:balanceNow(e.id, lines, advAll)),0);
+  const paidP = paidIn(null, from, to);
   const maxT = Math.max(1, ...emps.map(e=>e.total));
   let body = '';
   if(S.sub==='workers'){
     body = emps.length ? emps.map(s=>{ const e=empById(s.emp); const roles=Object.keys(s.byRole).map(rid=>{const r=roleById(rid);return `<span class="tag" style="background:${r.color}">${esc(r.name)}</span>`;}).join('');
-      return `<div class="list-row tap" onclick="showWorker('${s.emp}')"><div class="avatar" style="background:${PALETTE[(parseInt(String(s.emp).replace(/\D/g,''))||0)%PALETTE.length]}">${esc((e.name||'?').slice(0,1))}</div><div class="main"><div class="t">${esc(e.name)} ${roles}</div><div class="s">${s.days} days · Duty ${fmt(s.basic)} · OT ${fmt(s.ot)}${s.adv?' · Adv '+fmt(s.adv):''}</div><div class="bar"><i style="width:${Math.round(s.total/maxT*100)}%"></i></div></div><div style="text-align:right"><div class="amt">${fmt(s.net)}</div><div class="note">${s.adv?'net':'total'}</div></div></div>`; }).join('') : '<div class="empty">No data for this period.</div>';
+      return `<div class="list-row tap" onclick="showWorker('${s.emp}')"><div class="avatar" style="background:${PALETTE[(parseInt(String(s.emp).replace(/\D/g,''))||0)%PALETTE.length]}">${esc((e.name||'?').slice(0,1))}</div><div class="main"><div class="t">${esc(e.name)} ${roles}</div><div class="s">${s.days} days · Duty ${fmt(s.basic)} · OT ${fmt(s.ot)}${s.adv?' · Adv '+fmt(s.adv):''}</div><div class="bar"><i style="width:${Math.round(s.total/maxT*100)}%"></i></div></div><div style="text-align:right"><div class="amt">${fmt(nowBal[s.emp])}</div><div class="note">due now</div></div></div>`; }).join('') : '<div class="empty">No data for this period.</div>';
   } else if(S.sub==='units'){
     const u = Object.entries(sm.units).sort((a,b)=>b[1].total-a[1].total);
     body = u.length ? `<table class="t"><tr><th>Unit</th><th class="n">Man-days</th><th class="n">Ghori</th><th class="n">OT</th><th class="n">Salary</th></tr>${u.map(([k,v])=>`<tr><td><b>${esc(k)}</b></td><td class="n">${v.mandays}</td><td class="n">${v.ghori}</td><td class="n">${fmt(v.ot)}</td><td class="n">${fmt(v.total)}</td></tr>`).join('')}</table>` : '<div class="empty">No data.</div>';
@@ -714,7 +727,8 @@ function renderSalary(){
       <div class="kpi"><div class="k">Duty amount</div><div class="v">${fmt(sm.tot.total-sm.tot.ot)}</div></div>
       <div class="kpi"><div class="k">Overtime amount</div><div class="v">${fmt(sm.tot.ot)}</div></div>
       <div class="kpi"><div class="k">Advance</div><div class="v bad">${fmt(sm.tot.adv)}</div></div>
-      <div class="kpi"><div class="k">Net payable</div><div class="v good">${fmt(sm.tot.net)}</div></div>
+      <div class="kpi"><div class="k">Paid (settled in period)</div><div class="v">${fmt(paidP)}</div></div>
+      <div class="kpi"><div class="k">Balance to pay now</div><div class="v good">${fmt(totNow)}</div><div class="note">after all settlements</div></div>
       <div class="kpi"><div class="k">People</div><div class="v">${sm.emps.length}</div></div>
     </div>
     <div class="subtabs">${[['workers','By worker'],['units','By unit'],['roles','By role'],['days','By day']].map(([k,l])=>`<button class="${S.sub===k?'on':''}" onclick="S.sub='${k}';render()">${l}</button>`).join('')}</div>
@@ -772,11 +786,13 @@ function workerHtml(id, inline){
     ${prof}
     ${pending[id]?`<div class="warn" style="margin:0 0 12px">${pending[id]} ghori shortfall pending — will be deducted from next OT</div>`:''}
     <div class="kpis">
-      <div class="kpi hero"><div class="k">Net payable (${short(from)} – ${short(to)})</div><div class="v">${fmt(s.net)}</div></div>
+      <div class="kpi hero"><div class="k">Balance to pay now</div><div class="v">${fmt(balanceNow(id, lines, allAdvances()))}</div><div class="note" style="color:#fff;opacity:.85">${lastH?'After settlement of duty up to '+pretty(lastH.date).main+(lastH.advUpto&&lastH.advUpto!==lastH.date?' (advances to '+short(lastH.advUpto)+')':''):'Never settled yet'}</div></div>
       <div class="kpi"><div class="k">Duty amount</div><div class="v">${fmt(s.basic)}</div><div class="note">${s.days} days${s.monthly?' + monthly':''}</div></div>
       <div class="kpi"><div class="k">Overtime amount</div><div class="v">${fmt(s.ot)}</div><div class="note">${hours?hours+' hrs':''}</div></div>
       <div class="kpi"><div class="k">Total earned</div><div class="v">${fmt(s.total)}</div></div>
-      <div class="kpi"><div class="k">Advance</div><div class="v bad">${fmt(s.adv)}</div></div>
+      <div class="kpi"><div class="k">Advance (in period)</div><div class="v bad">${fmt(s.adv)}</div></div>
+      <div class="kpi"><div class="k">Paid (in period)</div><div class="v">${fmt(paidIn(id, from, to))}</div></div>
+      <div class="kpi"><div class="k">Period: ${short(from)} – ${short(to)}</div><div class="note">Duty, OT and advance boxes are for this period. Balance above is as of today.</div></div>
     </div>
     <div class="card"><div class="lbl">By role</div>${Object.keys(s.byRole).length||s.monthly?`<table class="t">${Object.entries(s.byRole).map(([rid,v])=>`<tr><td><span class="tag" style="background:${roleById(rid).color}">${esc(roleById(rid).name)}</span></td><td class="n">${v.days} days</td><td class="n">Duty ${fmt(v.total-v.ot)}</td><td class="n">OT ${fmt(v.ot)}</td></tr>`).join('')}${s.monthly?`<tr><td>Monthly (fixed)</td><td></td><td class="n">Duty ${fmt(s.monthly)}</td><td></td></tr>`:''}</table>`:'<div class="note">No work in this period.</div>'}
       ${qualityTable(s.byQ||{})}
