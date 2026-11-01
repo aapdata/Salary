@@ -409,7 +409,7 @@ async function mutate(key, empty, fn){
 
 /* ---------- state ---------- */
 let cfg=null, me=null, months={}, hisabs=[], allLoaded=false;
-const S = { payMode:'one', pay:null, payDone:null, hisAdvDate: today(), hisBank:'', hisCash:'', tab:'entry', date: today(), shift:'Day', unit:null, quality:'Special', sel:{}, hours:{}, ghori:'', note:'', adjust:true,
+const S = { setlDate: today(), payMode:'one', pay:null, payDone:null, hisAdvDate: today(), hisBank:'', hisCash:'', tab:'entry', date: today(), shift:'Day', unit:null, quality:'Special', sel:{}, hours:{}, ghori:'', note:'', adjust:true,
   per:'month', person:'', month: today().slice(0,7), from: today().slice(0,8)+'01', to: today(), sub:'workers',
   advEmp:'', hisEmp:'', hisDate: today(), hisPaid:'', hisAction:'carry', setTab:'emps' };
 
@@ -989,6 +989,8 @@ async function delAdvance(id){
 
 /* ---------- HISAB ---------- */
 /* ---------- SETTLE / PAY ---------- */
+function cashOf(h){ return h.cash!=null ? Number(h.cash)||0 : Math.max(0,(Number(h.paid)||0)-(Number(h.bank)||0)); }
+function paidDate(h){ return h.paidOn || (h.at ? toISO(new Date(h.at)) : h.date); }
 function payModeText(h){
   const bank = Number(h.bank)||0, cash = h.cash!=null ? Number(h.cash)||0 : (Number(h.paid)||0) - bank;
   return [bank?'Bank '+fmt(bank):'', cash?'Cash '+fmt(cash):''].filter(Boolean).join(' + ') || 'Nothing paid';
@@ -1002,7 +1004,8 @@ function renderHisab(){
   let calc = null;
   if(S.hisEmp) calc = hisabFor(S.hisEmp, S.hisDate, S.hisAdvDate, lines, allAdvances(), hisabs, cfg);
   const e = S.hisEmp ? empById(S.hisEmp) : null;
-  const recent = [...hisabs].filter(h=>!S.hisEmp || h.emp===S.hisEmp).sort((a,b)=> (b.at||0)-(a.at||0)).slice(0,15);
+  const recent = S.hisEmp ? hisabs.filter(h=>h.emp===S.hisEmp).sort((a,b)=> (b.at||0)-(a.at||0)) : hisabs.filter(h=>paidDate(h)===S.setlDate).sort((a,b)=>empById(a.emp).name.localeCompare(empById(b.emp).name));
+  const rBank = recent.reduce((x,h)=>x+(Number(h.bank)||0),0), rCash = recent.reduce((x,h)=>x+cashOf(h),0);
   $('view').innerHTML = `${modeSeg}
     <div class="card"><div class="ctitle">Settle account</div>
       <div class="field"><select onchange="S.hisEmp=this.value;S.hisBank='';S.hisCash='';render()">${empOptions(S.hisEmp)}</select></div>
@@ -1028,8 +1031,11 @@ function renderHisab(){
         <button class="btn ghost mt" onclick="openPerson('${S.hisEmp}')">Open full dashboard of this person</button>` : '<div class="note">Select an employee. Duty starts from the day after their last settlement. Advances can be counted up to a later date (e.g. duty till 20th, advances till today).</div>'}
     </div>
     ${calc ? hisabDetail(calc) : ''}
-    <div class="sec">${S.hisEmp?esc(empById(S.hisEmp).name)+" — past settlements":"Past settlements"}</div>
-    <div class="card" style="padding:4px 14px">${recent.length ? recent.map(h=>`<div class="list-row tap" onclick="hisabActions('${h.id}')"><div class="main"><div class="t">${esc(empById(h.emp).name)}</div><div class="s">Duty to ${short(h.date)}${h.advUpto&&h.advUpto!==h.date?' · adv to '+short(h.advUpto):''} · ${payModeText(h)}</div></div><div style="text-align:right"><div class="amt">${fmt(h.balance)}</div><div class="note">${h.action==='carry'?'Carry forward':'Nil'}</div></div></div>`).join('') : '<div class="empty">No settlements yet.</div>'}</div>
+    ${S.hisEmp ? `<div class="sec">${esc(empById(S.hisEmp).name)} — all settlements (${recent.length})</div>` : `<div class="sec">Settlements made on a date</div>
+    <div class="card"><div class="lbl">Settlement date</div><input type="date" value="${S.setlDate}" max="${today()}" onchange="S.setlDate=this.value;render()">
+      ${recent.length?`<div class="kpis mt" style="margin-bottom:0"><div class="kpi"><div class="k">${recent.length} settlements</div><div class="v">${fmt(rBank+rCash)}</div></div><div class="kpi"><div class="k">Bank / Cash</div><div class="note"><b>${fmt(rBank)}</b> bank<br><b>${fmt(rCash)}</b> cash</div></div></div>
+      <button class="btn mt" onclick="S.payDone='D:${S.setlDate}';render();window.scrollTo(0,0)">Open — bank Excel, vouchers, SMS</button>`:''}</div>`}
+    <div class="card" style="padding:4px 14px">${recent.length ? recent.map(h=>`<div class="list-row tap" onclick="hisabActions('${h.id}')"><div class="main"><div class="t">${esc(empById(h.emp).name)}</div><div class="s">Paid ${short(paidDate(h))} · Duty to ${short(h.date)}${h.advUpto&&h.advUpto!==h.date?' · adv to '+short(h.advUpto):''} · ${payModeText(h)}</div></div><div style="text-align:right"><div class="amt">${fmt(h.balance)}</div><div class="note">${h.action==='carry'?'Carry forward':'Nil'}</div></div></div>`).join('') : `<div class="empty">No settlements ${S.hisEmp?'yet':'made on '+pretty(S.setlDate).main}.</div>`}</div>
     ${payRunsList()}`;
 }
 function paidNow(){ return (Number(S.hisBank)||0) + (Number(S.hisCash)||0); }
@@ -1155,20 +1161,20 @@ async function savePayMany(){
 }
 function payRunsList(){
   const groups = {};
-  for(const h of hisabs){ const k=h.batchId||h.id; (groups[k]=groups[k]||[]).push(h); }
-  const runs = Object.entries(groups).filter(([k,v])=>v.length>1 || (v[0].bank>0)).sort((a,b)=>(b[1][0].at||0)-(a[1][0].at||0)).slice(0,8);
-  if(!runs.length) return '';
-  return `<div class="sec">Past payment runs</div><div class="card" style="padding:4px 14px">${runs.map(([k,v])=>{ const bank=v.reduce((t,h)=>t+(Number(h.bank)||0),0), cash=v.reduce((t,h)=>t+(h.cash!=null?Number(h.cash)||0:0),0);
-    return `<div class="list-row tap" onclick="S.payDone='${k}';render();window.scrollTo(0,0)"><div class="main"><div class="t">${v.length} ${v.length===1?'person':'people'} · duty to ${short(v[0].date)}</div><div class="s">Paid ${short(v[0].paidOn||v[0].date)} · Bank ${fmt(bank)} · Cash ${fmt(cash)}</div></div><span class="note">›</span></div>`; }).join('')}</div>`;
+  for(const h of hisabs){ const k=paidDate(h); (groups[k]=groups[k]||[]).push(h); }
+  const days = Object.entries(groups).sort((a,b)=>a[0]<b[0]?1:-1).slice(0,40);
+  if(!days.length) return '';
+  return `<div class="sec">All settlement days</div><div class="card" style="padding:4px 14px">${days.map(([d,v])=>{ const bank=v.reduce((t,h)=>t+(Number(h.bank)||0),0), cash=v.reduce((t,h)=>t+cashOf(h),0);
+    return `<div class="list-row tap" onclick="S.setlDate='${d}';S.hisEmp='';render();window.scrollTo(0,document.body.scrollHeight/3)"><div class="main"><div class="t">${pretty(d).main} · ${v.length} ${v.length===1?'person':'people'}</div><div class="s">Bank ${fmt(bank)} · Cash ${fmt(cash)} · Total ${fmt(bank+cash)}</div></div><span class="note">›</span></div>`; }).join('')}</div>`;
 }
-function batchList(batchId){ return hisabs.filter(h=>(h.batchId||h.id)===batchId).sort((a,b)=>empById(a.emp).name.localeCompare(empById(b.emp).name)); }
+function batchList(batchId){ if(String(batchId).startsWith('D:')){ const d=batchId.slice(2); return hisabs.filter(h=>paidDate(h)===d).sort((a,b)=>empById(a.emp).name.localeCompare(empById(b.emp).name)); } return hisabs.filter(h=>(h.batchId||h.id)===batchId).sort((a,b)=>empById(a.emp).name.localeCompare(empById(b.emp).name)); }
 function renderPayDone(){
   const L = batchList(S.payDone);
   if(!L.length){ S.payDone=null; return renderHisab(); }
-  const bank=L.reduce((t,h)=>t+(Number(h.bank)||0),0), cash=L.reduce((t,h)=>t+(h.cash!=null?Number(h.cash)||0:0),0);
+  const bank=L.reduce((t,h)=>t+(Number(h.bank)||0),0), cash=L.reduce((t,h)=>t+cashOf(h),0);
   const bankN = L.filter(h=>h.bank>0).length;
   $('view').innerHTML = `
-    <div class="kpis"><div class="kpi hero"><div class="k">Payments saved — duty up to ${pretty(L[0].date).main}</div><div class="v">${fmt(bank+cash)}</div><div class="note" style="color:#fff;opacity:.85">${L.length} ${L.length===1?'person':'people'}</div></div>
+    <div class="kpis"><div class="kpi hero"><div class="k">${String(S.payDone).startsWith('D:')?'Settlements made on '+pretty(S.payDone.slice(2)).main:'Payments saved — duty up to '+pretty(L[0].date).main}</div><div class="v">${fmt(bank+cash)}</div><div class="note" style="color:#fff;opacity:.85">${L.length} ${L.length===1?'person':'people'}</div></div>
       <div class="kpi"><div class="k">By bank (${bankN})</div><div class="v">${fmt(bank)}</div></div><div class="kpi"><div class="k">Cash (${L.length-bankN})</div><div class="v">${fmt(cash)}</div></div></div>
     <div class="card"><div class="ctitle">Next steps</div>
       ${bankN?`<button class="btn" onclick="bankExcel('${S.payDone}')">⬇ Download bank transfer Excel</button>`:''}
@@ -1226,11 +1232,11 @@ function printVouchers(batchId, onlyId){
   showPrint(L.map(voucherHtml).join(''), L.length===1 ? 'Voucher — '+empById(L[0].emp).name : L.length+' vouchers');
 }
 function printCashList(batchId){
-  const L = batchList(batchId).filter(h=>(h.cash!=null?Number(h.cash):0)>0);
-  const tot = L.reduce((t,h)=>t+Number(h.cash),0);
+  const L = batchList(batchId).filter(h=>cashOf(h)>0);
+  const tot = L.reduce((t,h)=>t+cashOf(h),0);
   showPrint(`<div class="voucher"><div class="vh"><div><h3>${esc(coName())}</h3><div>Cash salary payments — duty up to ${dmy(L[0]?L[0].date:'')}</div></div><div style="text-align:right">Date ${dmy(today())}</div></div>
     <table><tr><td><b>#</b></td><td><b>Name</b></td><td><b>ID</b></td><td class="n"><b>Cash</b></td><td style="width:35%"><b>Signature</b></td></tr>
-    ${L.map((h,i)=>`<tr><td>${i+1}</td><td>${esc(empById(h.emp).name)}</td><td>${h.emp}</td><td class="n">${fmt(h.cash)}</td><td style="border-bottom:1px solid #999;height:26px"></td></tr>`).join('')}
+    ${L.map((h,i)=>`<tr><td>${i+1}</td><td>${esc(empById(h.emp).name)}</td><td>${h.emp}</td><td class="n">${fmt(cashOf(h))}</td><td style="border-bottom:1px solid #999;height:26px"></td></tr>`).join('')}
     <tr class="tot"><td></td><td>Total</td><td></td><td class="n">${fmt(tot)}</td><td></td></tr></table></div>`, 'Cash payment list');
 }
 async function bankExcel(batchId){
